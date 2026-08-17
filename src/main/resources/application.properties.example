@@ -1,0 +1,4 @@
+spring.application.name=movie_reservation
+spring.datasource.url=<Your_Database_Url>
+spring.datasource.username=<Your_Database_Username>
+spring.datasource.password=<Your_Database_Password>
