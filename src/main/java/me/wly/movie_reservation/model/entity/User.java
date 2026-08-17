@@ -1,9 +1,9 @@
 package me.wly.movie_reservation.model.entity;
 
-import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
 import lombok.*;
-import me.wly.movie_reservation.UserRole;
+import me.wly.movie_reservation.common.utils.generateUuidCode;
+import me.wly.movie_reservation.model.enum_class.UserRole;
 
 
 @Entity
@@ -11,14 +11,22 @@ import me.wly.movie_reservation.UserRole;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Table(name = "users")
 public class User {
     @Id
+    @GeneratedValue (strategy = GenerationType.IDENTITY)
     private Integer id;
+    private String code;
     private String username;
     private String nickName;
     private String emailAddress;
     private String phoneNumber;
     private String password;
-    @EnumeratedValue
+    @Enumerated(EnumType.STRING)
     private UserRole userRole;
+
+    @PrePersist
+    public void perPersist(){
+        this.code = generateUuidCode.setCode("usr_");
+    }
 }

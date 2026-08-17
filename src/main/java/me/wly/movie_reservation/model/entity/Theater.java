@@ -2,7 +2,8 @@ package me.wly.movie_reservation.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import me.wly.movie_reservation.HallType;
+import me.wly.movie_reservation.common.utils.generateUuidCode;
+import me.wly.movie_reservation.model.enum_class.HallType;
 import me.wly.movie_reservation.common.utils.HallTypeListConverter;
 
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.List;
 @AllArgsConstructor
 public class Theater {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
     @ManyToOne
     @JoinColumn(name = "city_id", referencedColumnName = "id")

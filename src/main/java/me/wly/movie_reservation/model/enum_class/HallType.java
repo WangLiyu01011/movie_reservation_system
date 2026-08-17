@@ -1,4 +1,4 @@
-package me.wly.movie_reservation;
+package me.wly.movie_reservation.model.enum_class;
 
 import lombok.Getter;
 
@@ -18,4 +18,5 @@ public enum HallType {
         this.code = code;
         this.description = description;
     }
+
 }

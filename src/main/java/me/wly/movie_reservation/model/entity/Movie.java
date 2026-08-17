@@ -3,6 +3,8 @@ package me.wly.movie_reservation.model.entity;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,6 +26,8 @@ public class Movie {
     private LocalDateTime offDate;
     private String title;
     private String description;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "json")
     private List<String> genres;
     private String language;
     private String posterImageURL;

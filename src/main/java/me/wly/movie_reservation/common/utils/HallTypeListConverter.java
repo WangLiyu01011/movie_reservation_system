@@ -2,8 +2,7 @@ package me.wly.movie_reservation.common.utils;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
-import me.wly.movie_reservation.HallType;
-import me.wly.movie_reservation.model.entity.Hall;
+import me.wly.movie_reservation.model.enum_class.HallType;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 

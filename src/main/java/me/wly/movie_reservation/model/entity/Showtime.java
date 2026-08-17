@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class Showtime {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
@@ -28,7 +29,9 @@ public class Showtime {
     @ManyToOne
     @JoinColumn(name = "hall_id")
     private Hall hall;
+    private String hallName;
     @ManyToOne
     @JoinColumn(name = "movie_id")
     private Movie movie;
+    private String movieTitle;
 }

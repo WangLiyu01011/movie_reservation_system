@@ -1,15 +1,13 @@
 package me.wly.movie_reservation.model.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import me.wly.movie_reservation.HallType;
+import me.wly.movie_reservation.common.utils.generateUuidCode;
+import me.wly.movie_reservation.model.enum_class.HallType;
 
 
 @Entity
@@ -19,9 +17,15 @@ import me.wly.movie_reservation.HallType;
 @Setter
 public class Hall {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
     @ManyToOne
     @JoinColumn(name = "theater_id")
     private Theater theater;
+    private String name;
+    @Enumerated(EnumType.STRING)
     private HallType type;
+    private Integer width;
+    private Integer length;
+
 }
