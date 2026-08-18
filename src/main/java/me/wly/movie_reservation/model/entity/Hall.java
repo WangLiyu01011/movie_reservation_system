@@ -6,7 +6,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import me.wly.movie_reservation.common.utils.generateUuidCode;
 import me.wly.movie_reservation.model.enum_class.HallType;
 
 

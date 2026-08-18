@@ -1,6 +1,7 @@
 package me.wly.movie_reservation.controller;
 
 import lombok.RequiredArgsConstructor;
+import me.wly.movie_reservation.model.vo.MovieDetailVO;
 import me.wly.movie_reservation.model.vo.MovieVO;
 import me.wly.movie_reservation.service.MovieService;
 import me.wly.movie_reservation.common.utils.ApiResponse;
@@ -28,9 +29,9 @@ public class MovieController {
     }
 
     @GetMapping("/{imdbId}")
-    public ResponseEntity<ApiResponse<MovieVO>> getSingleMovie(@PathVariable String imdbId){
+    public ResponseEntity<ApiResponse<MovieDetailVO>> getSingleMovie(@PathVariable String imdbId){
 
-        return new ResponseEntity<ApiResponse<MovieVO>> (ApiResponse.success(movieService.singleMovie(imdbId)), HttpStatus.OK);
+        return new ResponseEntity<ApiResponse<MovieDetailVO>> (ApiResponse.success(movieService.singleMovie(imdbId)), HttpStatus.OK);
     }
 
 

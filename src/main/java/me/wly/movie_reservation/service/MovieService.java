@@ -3,6 +3,7 @@ package me.wly.movie_reservation.service;
 import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.mapper.MovieMapper;
 import me.wly.movie_reservation.model.entity.Movie;
+import me.wly.movie_reservation.model.vo.MovieDetailVO;
 import me.wly.movie_reservation.model.vo.MovieVO;
 import me.wly.movie_reservation.repository.MovieRepository;
 import org.springframework.stereotype.Service;
@@ -31,10 +32,10 @@ public class MovieService {
         }
     }
 
-    public MovieVO singleMovie(String imdbId){
+    public MovieDetailVO singleMovie(String imdbId){
         Movie movieFound = movieRepository.findMovieByImdbId(imdbId)
                 .orElseThrow(()->new BusinessException(ResultCode.MOVIE_NOT_FOUND, "Movie not found with: " + imdbId));
-        return movieMapper.entityToVO(movieFound);
+        return movieMapper.entityToDetailVO(movieFound);
     }
 
     public List<Movie> getUpcomingMovies(){

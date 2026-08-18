@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import me.wly.movie_reservation.common.utils.generateUuidCode;
+import me.wly.movie_reservation.common.utils.UuidCodeGenerator;
 
 @Entity
 @Getter
@@ -33,7 +33,7 @@ public class Order {
     private Seat seat;
     @PrePersist
     public void prePersist(){
-        this.code = generateUuidCode.setCode("odr_");
+        this.code = UuidCodeGenerator.generateCode("odr_");
     }
 
 }

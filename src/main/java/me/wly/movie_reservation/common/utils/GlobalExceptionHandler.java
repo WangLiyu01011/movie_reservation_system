@@ -11,7 +11,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
-public class globalExceptionHandler {
+public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public Map<String, Object> businessExceptionHandler(BusinessException e) {
         Map<String, Object> response = new HashMap<>();

@@ -27,6 +27,6 @@ public class ShowtimeController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<ShowtimeDTO>> createShowtime(@Valid @RequestBody ShowtimeCreateDTO newShowtime) {
-        return new ResponseEntity<ApiResponse<ShowtimeDTO>>(ApiResponse.success(showtimeService.createShowtime(newShowtime)), HttpStatus.OK);
+        return new ResponseEntity<ApiResponse<ShowtimeDTO>>(ApiResponse.success(showtimeService.createShowtime(newShowtime)), HttpStatus.CREATED);
     }
 }

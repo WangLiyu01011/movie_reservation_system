@@ -2,7 +2,6 @@ package me.wly.movie_reservation.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import me.wly.movie_reservation.common.utils.generateUuidCode;
 import me.wly.movie_reservation.model.enum_class.HallType;
 import me.wly.movie_reservation.common.utils.HallTypeListConverter;
 
