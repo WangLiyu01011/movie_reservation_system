@@ -20,6 +20,8 @@ public class Seat {
     @JoinColumn(name = "hall_id")
     private Hall hall;
 
+    @Enumerated(EnumType.STRING)
     private SeatType seatType;
+    @Enumerated(EnumType.STRING)
     private SeatStatus seatStatus;
 }

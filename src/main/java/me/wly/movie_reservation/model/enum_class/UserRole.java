@@ -2,7 +2,7 @@ package me.wly.movie_reservation.model.enum_class;
 
 import lombok.Getter;
 
-public enum UserType {
+public enum UserRole {
     SYSTEM_ADMIN("SYSTEM_ADMIN"),
     THEATER_ADMIN("THEATER_ADMIN"),
     CUSTOMER("CUSTOMER");
@@ -10,7 +10,7 @@ public enum UserType {
     @Getter
     private final String code;
 
-    UserType(String code) {
+    UserRole(String code) {
         this.code = code;
     }
 }

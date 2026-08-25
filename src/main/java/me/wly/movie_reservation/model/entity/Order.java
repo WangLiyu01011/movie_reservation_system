@@ -8,6 +8,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import me.wly.movie_reservation.common.utils.UuidCodeGenerator;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
 @Entity
 @Getter
 @Setter
@@ -25,12 +29,17 @@ public class Order {
     @ManyToOne
     @JoinColumn(name = "movie_id")
     private Movie movie;
+    private String movieTitle;
     @ManyToOne
     @JoinColumn(name = "showtime_id")
     private Showtime showtime;
-    @OneToOne
+    private LocalDateTime startTime;
+    private LocalDateTime endTime;
+    @OneToMany
     @JoinColumn(name = "seat_id")
-    private Seat seat;
+    private List<Seat> seat;
+    private List<String> seatLocations;
+    private BigDecimal totalPrice;
     @PrePersist
     public void prePersist(){
         this.code = UuidCodeGenerator.generateCode("odr_");

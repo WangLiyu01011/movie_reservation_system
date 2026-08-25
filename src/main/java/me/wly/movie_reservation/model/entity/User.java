@@ -3,7 +3,7 @@ package me.wly.movie_reservation.model.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import me.wly.movie_reservation.common.utils.UuidCodeGenerator;
-import me.wly.movie_reservation.model.enum_class.UserType;
+import me.wly.movie_reservation.model.enum_class.UserRole;
 
 import java.util.*;
 
@@ -25,7 +25,7 @@ public class User {
     private String phoneNumber;
     private String password;
     @Enumerated(EnumType.STRING)
-    private UserType userType;
+    private UserRole userRole;
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<TheaterAdmin> theaterAdmins = new HashSet<>();
     @OneToMany(mappedBy = "user" , fetch = FetchType.LAZY, cascade = CascadeType.ALL)
