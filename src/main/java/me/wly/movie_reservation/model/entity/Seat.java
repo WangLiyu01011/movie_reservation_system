@@ -22,6 +22,5 @@ public class Seat {
 
     @Enumerated(EnumType.STRING)
     private SeatType seatType;
-    @Enumerated(EnumType.STRING)
-    private SeatStatus seatStatus;
+    private String seatLabel;
 }

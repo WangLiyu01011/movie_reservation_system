@@ -1,9 +1,10 @@
 package me.wly.movie_reservation.model.enum_class;
 
 public enum SeatStatus {
-        RESERVED("RESERVED"),
-        AVAILABLE("AVAILABLE");
-        private String status;
+        AVAILABLE("AVAILABLE"),
+        LOCKED("LOCKED"),
+        SOLD("SOLD");
+        private final String status;
         SeatStatus(String status){
             this.status = status;
         }

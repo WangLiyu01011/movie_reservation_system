@@ -24,7 +24,9 @@ public class Hall {
     private String name;
     @Enumerated(EnumType.STRING)
     private HallType type;
-    private Integer width;
-    private Integer length;
+    private String status;
+    private Integer rowCount;
+    private Integer columnCount;
+
 
 }
