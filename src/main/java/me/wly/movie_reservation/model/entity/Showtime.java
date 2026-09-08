@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 public class Showtime {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     @Column(precision = 5, scale = 2)
@@ -26,6 +26,7 @@ public class Showtime {
     @ManyToOne
     @JoinColumn(name = "theater_id")
     private Theater theater;
+    private String theaterName;
     @ManyToOne
     @JoinColumn(name = "hall_id")
     private Hall hall;

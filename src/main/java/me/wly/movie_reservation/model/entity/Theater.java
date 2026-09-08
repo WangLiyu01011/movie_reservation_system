@@ -25,7 +25,4 @@ public class Theater {
     private Area district;
     private String theaterName;
     private String location;
-    @Convert(converter = HallTypeListConverter.class)
-    @Column(columnDefinition = "VARCHAR(255)")
-    private List<HallType> hallTypesContain;
 }

@@ -6,6 +6,5 @@ import java.util.List;
 
 public record TheaterVO(
         String theaterName,
-        String location,
-        List<HallType> hallTypeContain
+        String location
 ){}

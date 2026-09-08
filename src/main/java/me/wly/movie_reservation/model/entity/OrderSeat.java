@@ -16,13 +16,14 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class OrderSeat {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @ManyToOne
-    @JoinColumn(name = "order_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = false)
     private Order order;
     @OneToOne
-    @JoinColumn(name = "showtime_seat_id")
+    @JoinColumn(name = "showtime_seat_id", nullable = false, unique = true)
     private ShowtimeSeat showtimeSeat;
-    @Column(length = 10, scale = 2)
+    @Column(precision = 10, scale = 2, nullable = false)
     private BigDecimal ticketPrice;
 }

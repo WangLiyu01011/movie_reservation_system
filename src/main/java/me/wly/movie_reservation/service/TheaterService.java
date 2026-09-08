@@ -18,19 +18,19 @@ public class TheaterService {
 
         if(districtId!=null){
             List<Theater> theaters = theaterRepository.findTheaterByDistrict_Id(districtId);
-            return theaters.stream().map(entity->new TheaterVO(entity.getTheaterName(), entity.getLocation(), entity.getHallTypesContain()))
+            return theaters.stream().map(entity->new TheaterVO(entity.getTheaterName(), entity.getLocation()))
                     .toList();
         }
 
         if(cityId!=null){
             cityId = (cityId % 100) * 100;
             List<Theater> theaters = theaterRepository.findTheaterByCity_Id(cityId);
-            return theaters.stream().map(entity->new TheaterVO(entity.getTheaterName(), entity.getLocation(), entity.getHallTypesContain()))
+            return theaters.stream().map(entity->new TheaterVO(entity.getTheaterName(), entity.getLocation()))
                     .toList();
         }
 
         List<Theater> theaters = theaterRepository.findAll();
-        return theaters.stream().map(entity->new TheaterVO(entity.getTheaterName(), entity.getLocation(), entity.getHallTypesContain()))
+        return theaters.stream().map(entity->new TheaterVO(entity.getTheaterName(), entity.getLocation()))
                 .toList();
     }
 

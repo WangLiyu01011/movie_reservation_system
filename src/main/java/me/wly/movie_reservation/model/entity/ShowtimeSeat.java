@@ -31,6 +31,7 @@ public class ShowtimeSeat {
     private Order order;
     private String lockToken;
     private LocalDateTime lockUntil;
+    @Version
     private Long version;
     @Enumerated(EnumType.STRING)
     private SeatType seatTypeSnapshot;
