@@ -10,4 +10,5 @@ import java.util.List;
 public interface TheaterRepository extends JpaRepository<Theater, Integer> {
     List<Theater> findTheaterByDistrict_Id(Integer districtId);
     List<Theater> findTheaterByCity_Id(Integer cityId);
+    boolean existsByDistrict_IdAndTheaterName(Integer districtId, String theaterName);
 }

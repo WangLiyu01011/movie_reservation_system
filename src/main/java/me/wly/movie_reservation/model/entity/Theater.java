@@ -25,4 +25,11 @@ public class Theater {
     private Area district;
     private String theaterName;
     private String location;
+
+    /**
+     * 影院声明可创建的影厅类型；实际影厅类型仍以 Hall.type 为准。
+     */
+    @Convert(converter = HallTypeListConverter.class)
+    @Column(name = "hall_types_contain", nullable = false)
+    private List<HallType> hallTypesContain;
 }

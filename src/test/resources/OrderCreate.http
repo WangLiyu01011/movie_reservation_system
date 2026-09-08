@@ -1,9 +1,9 @@
 POST http://localhost:8080/api/v1/orders
-Authorization:
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0dXNlciIsImlhdCI6MTc4ODgzMjYyMiwiZXhwIjoxNzg4OTE5MDIyfQ.UQ1cMkkO_jHYRzHzrNiRw7w3n6VjEzlI2oielCJtF0Ai1vdxWO27n3sSz4SfmZXf3tHaQ1AFDci1rX5zIQZXtA
 Content-Type: application/json
 
 {
-  "showtimeId": 900001,
+  "showtimeId": 900002,
   "seatIds": [900001, 900002],
   "requestId": "manual-order-001"
 }

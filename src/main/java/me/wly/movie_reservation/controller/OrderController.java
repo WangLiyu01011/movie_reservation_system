@@ -3,15 +3,12 @@ package me.wly.movie_reservation.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.common.utils.ApiResponse;
-import me.wly.movie_reservation.model.dto.OrderGenerateDTO;
-import me.wly.movie_reservation.model.dto.UserOrderDTO;
+import me.wly.movie_reservation.model.dto.OrderCreateDTO;
+import me.wly.movie_reservation.model.vo.OrderGenerateVO;
 import me.wly.movie_reservation.model.vo.OrderVO;
-import me.wly.movie_reservation.service.MyUserDetailsService;
 import me.wly.movie_reservation.service.OrderService;
-import me.wly.movie_reservation.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -28,9 +25,17 @@ public class OrderController {
     public ResponseEntity<ApiResponse<List<OrderVO>>> getOrders(@PathVariable String userCode) {
         return new ResponseEntity<ApiResponse<List<OrderVO>>>(ApiResponse.success(orderService.getOrderByUserCode(userCode)), HttpStatus.OK);
     }
+
     @PostMapping
-    public ResponseEntity<ApiResponse<String>> generateOrder(@Valid @RequestBody OrderGenerateDTO dto, @AuthenticationPrincipal UserDetails userDetails) {
-        String orderCode = orderService.generateOrder(dto, userDetails.getUsername());
-        return new ResponseEntity<>(ApiResponse.success(orderCode), HttpStatus.CREATED);
+    public ResponseEntity<ApiResponse<OrderGenerateVO>> generateOrder(@Valid @RequestBody OrderCreateDTO dto, @AuthenticationPrincipal UserDetails userDetails) {
+        OrderGenerateVO orderGenerateVO = orderService.generateOrder(dto, userDetails.getUsername());
+        return new ResponseEntity<>(ApiResponse.success(orderGenerateVO), HttpStatus.CREATED);
     }
+
+//    @PostMapping(path = "/payment")
+//    public ResponseEntity<ApiResponse<String>> orderPayment(@Valid @RequestBody OrderPaymentDTO dto, @AuthenticationPrincipal UserDetails userDetails) {
+//
+//
+//    }
+
 }

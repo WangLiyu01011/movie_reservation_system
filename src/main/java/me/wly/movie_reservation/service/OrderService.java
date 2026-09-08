@@ -4,13 +4,14 @@ import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.common.exception.ResultCode;
 import me.wly.movie_reservation.mapper.OrderMapper;
-import me.wly.movie_reservation.model.dto.OrderGenerateDTO;
+import me.wly.movie_reservation.model.dto.OrderCreateDTO;
 import me.wly.movie_reservation.model.entity.Order;
 import me.wly.movie_reservation.model.entity.OrderSeat;
 import me.wly.movie_reservation.model.entity.Showtime;
 import me.wly.movie_reservation.model.entity.ShowtimeSeat;
 import me.wly.movie_reservation.model.entity.User;
 import me.wly.movie_reservation.model.enum_class.SeatStatus;
+import me.wly.movie_reservation.model.vo.OrderGenerateVO;
 import me.wly.movie_reservation.model.vo.OrderVO;
 import me.wly.movie_reservation.repository.*;
 import org.springframework.stereotype.Service;
@@ -24,8 +25,6 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class OrderService {
-    private final SeatRepository seatRepository;
-    private final OrderSeatRepository orderSeatRepository;
     private final ShowtimeSeatRepository showtimeSeatRepository;
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
@@ -39,26 +38,28 @@ public class OrderService {
     }
 
     @Transactional
-    public String generateOrder(OrderGenerateDTO dto, String username) {
+    public OrderGenerateVO generateOrder(OrderCreateDTO dto, String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND, "User not found"));
 
         Order existingOrder = orderRepository.findByUser_IdAndRequestId(user.getId(), dto.requestId())
                 .orElse(null);
         if (existingOrder != null) {
-            return existingOrder.getCode();
+            return orderMapper.toCreateVO(existingOrder);
         }
 
-        Long showtimeId = dto.showtimeId();
         Showtime showtime = showtimeRepository.findById(dto.showtimeId())
                 .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "Showtime not found"));
+        if (showtime.getStartTime() == null || !showtime.getStartTime().isAfter(LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Cannot create an order for a started showtime");
+        }
 
         List<Long> seatIds = dto.seatIds();
         if (seatIds.size() != new HashSet<>(seatIds).size()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Duplicate seats are not allowed");
         }
 
-        List<ShowtimeSeat> showtimeSeats = showtimeSeatRepository.findAllForUpdate(showtimeId, seatIds);
+        List<ShowtimeSeat> showtimeSeats = showtimeSeatRepository.findAllForUpdate(showtime.getId(), seatIds);
         if (showtimeSeats.size() != seatIds.size()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "One or more seats do not belong to this showtime");
         }
@@ -103,6 +104,10 @@ public class OrderService {
             showtimeSeat.setLockUntil(expiresAt);
         }
 
-        return savedOrder.getCode();
+        return orderMapper.toCreateVO(created);
     }
+
+//    public String payOrder(OrderPaymentDTO dto, String username) {
+//
+//    }
 }

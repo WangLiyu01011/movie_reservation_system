@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
-public record OrderGenerateDTO(
+public record OrderCreateDTO(
         @NotNull Long showtimeId,
         @NotEmpty List<Long> seatIds,
         @NotBlank String requestId

@@ -2,13 +2,16 @@ package me.wly.movie_reservation.model.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
-import me.wly.movie_reservation.model.enum_class.SeatStatus;
+import lombok.Setter;
 import me.wly.movie_reservation.model.enum_class.SeatType;
 
 @Entity
 @AllArgsConstructor
 @NoArgsConstructor
+@Getter
+@Setter
 public class Seat {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -17,14 +17,16 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class ShowtimeSeat {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne
-    @JoinColumn(name = "showtime_id")
+    @JoinColumn(name = "showtime_id", nullable = false)
     private Showtime showtime;
     @ManyToOne
-    @JoinColumn(name = "seat_id")
+    @JoinColumn(name = "seat_id", nullable = false)
     private Seat seat;
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private SeatStatus status;
     @ManyToOne
     @JoinColumn(name = "order_id")
@@ -34,6 +36,8 @@ public class ShowtimeSeat {
     @Version
     private Long version;
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private SeatType seatTypeSnapshot;
+    @Column(nullable = false)
     private String seatLabelSnapshot;
 }

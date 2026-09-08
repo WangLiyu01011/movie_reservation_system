@@ -1,11 +1,17 @@
 package me.wly.movie_reservation.service;
 
 import lombok.RequiredArgsConstructor;
+import me.wly.movie_reservation.common.exception.BusinessException;
+import me.wly.movie_reservation.common.exception.ResultCode;
+import me.wly.movie_reservation.model.dto.TheaterCreateDTO;
+import me.wly.movie_reservation.model.entity.Area;
 import me.wly.movie_reservation.model.entity.Theater;
+import me.wly.movie_reservation.model.vo.TheaterCreateVO;
 import me.wly.movie_reservation.model.vo.TheaterVO;
+import me.wly.movie_reservation.repository.AreaRepository;
 import me.wly.movie_reservation.repository.TheaterRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -13,6 +19,32 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TheaterService {
     private final TheaterRepository theaterRepository;
+    private final AreaRepository areaRepository;
+
+    @Transactional
+    public TheaterCreateVO createTheater(TheaterCreateDTO dto) {
+        Area city = areaRepository.findById(dto.cityId())
+                .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "City not found: " + dto.cityId()));
+        Area district = areaRepository.findById(dto.districtId())
+                .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "District not found: " + dto.districtId()));
+
+        if (city.getLevel() != 1 || district.getLevel() != 2 || district.getParentId() != city.getId()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "District must belong to the selected city");
+        }
+        if (theaterRepository.existsByDistrict_IdAndTheaterName(district.getId(), dto.theaterName())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Theater name already exists in this district");
+        }
+
+        Theater theater = new Theater();
+        theater.setCity(city);
+        theater.setDistrict(district);
+        theater.setTheaterName(dto.theaterName());
+        theater.setLocation(dto.location());
+        theater.setHallTypesContain(dto.hallTypesContain().stream().distinct().toList());
+
+        Theater savedTheater = theaterRepository.save(theater);
+        return toCreateVO(savedTheater);
+    }
 
     public List<TheaterVO> getTheaters(Integer cityId, Integer districtId){
 
@@ -23,7 +55,6 @@ public class TheaterService {
         }
 
         if(cityId!=null){
-            cityId = (cityId % 100) * 100;
             List<Theater> theaters = theaterRepository.findTheaterByCity_Id(cityId);
             return theaters.stream().map(entity->new TheaterVO(entity.getTheaterName(), entity.getLocation()))
                     .toList();
@@ -34,5 +65,17 @@ public class TheaterService {
                 .toList();
     }
 
+    private TheaterCreateVO toCreateVO(Theater theater) {
+        return new TheaterCreateVO(
+                theater.getId(),
+                theater.getCity().getId(),
+                theater.getCity().getName(),
+                theater.getDistrict().getId(),
+                theater.getDistrict().getName(),
+                theater.getTheaterName(),
+                theater.getLocation(),
+                theater.getHallTypesContain()
+        );
+    }
 
 }
