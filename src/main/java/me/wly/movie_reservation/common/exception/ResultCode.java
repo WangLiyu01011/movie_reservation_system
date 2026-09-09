@@ -4,6 +4,7 @@ public enum ResultCode {
     SUCCESS(200,"Success"),
     BAD_REQUEST(400,"Bad Request"),
     UNAUTHORIZED(401, "Unauthorized"),
+    FORBIDDEN(403, "Forbidden"),
     USER_NOT_FOUND(40401,"User Not Found"),
     MOVIE_NOT_FOUND(40402,"Movie Not Found"),
     THEATER_NOT_FOUND(40403,"Theater Not Found"),

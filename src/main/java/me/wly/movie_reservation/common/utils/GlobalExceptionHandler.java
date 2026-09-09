@@ -3,6 +3,7 @@ package me.wly.movie_reservation.common.utils;
 import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.common.exception.ResultCode;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -14,12 +15,12 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
-    public Map<String, Object> businessExceptionHandler(BusinessException e) {
+    public ResponseEntity<Map<String, Object>> businessExceptionHandler(BusinessException e) {
         Map<String, Object> response = new HashMap<>();
         response.put("code", e.resultCode.getCode());
-        response.put("message", e.resultCode.getMessage());
+        response.put("message", e.getMessage());
         response.put("data", null);
-        return response;
+        return ResponseEntity.status(toHttpStatus(e.resultCode)).body(response);
     }
 
     @ExceptionHandler(Exception.class)
@@ -40,5 +41,15 @@ public class GlobalExceptionHandler {
         response.put("message", e.getMessage());
         response.put("data", null);
         return response;
+    }
+
+    private HttpStatus toHttpStatus(ResultCode resultCode) {
+        return switch (resultCode) {
+            case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
+            case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
+            case FORBIDDEN -> HttpStatus.FORBIDDEN;
+            case USER_NOT_FOUND, MOVIE_NOT_FOUND, THEATER_NOT_FOUND, HALL_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            default -> HttpStatus.INTERNAL_SERVER_ERROR;
+        };
     }
 }

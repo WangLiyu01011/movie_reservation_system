@@ -3,15 +3,20 @@ package me.wly.movie_reservation.service;
 import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.model.dto.HallCreateDTO;
 import me.wly.movie_reservation.model.dto.HallDTO;
+import me.wly.movie_reservation.model.dto.HallUpdateDTO;
 import me.wly.movie_reservation.model.dto.SeatCellCreateDTO;
 import me.wly.movie_reservation.model.entity.Hall;
 import me.wly.movie_reservation.model.entity.Seat;
 import me.wly.movie_reservation.model.entity.Theater;
+import me.wly.movie_reservation.model.entity.User;
 import me.wly.movie_reservation.model.enum_class.HallType;
 import me.wly.movie_reservation.model.enum_class.SeatType;
+import me.wly.movie_reservation.model.enum_class.UserRole;
 import me.wly.movie_reservation.repository.HallRepository;
 import me.wly.movie_reservation.repository.SeatRepository;
 import me.wly.movie_reservation.repository.TheaterRepository;
+import me.wly.movie_reservation.repository.TheaterAdminRepository;
+import me.wly.movie_reservation.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,6 +43,10 @@ class HallServiceTest {
     private TheaterRepository theaterRepository;
     @Mock
     private SeatRepository seatRepository;
+    @Mock
+    private UserRepository userRepository;
+    @Mock
+    private TheaterAdminRepository theaterAdminRepository;
     @InjectMocks
     private HallService hallService;
 
@@ -52,6 +61,7 @@ class HallServiceTest {
                 )
         );
         when(theaterRepository.findById(1)).thenReturn(Optional.of(theater));
+        allowTheaterManagement("manager", theater);
         when(hallRepository.existsByTheater_IdAndName(1, "一号厅")).thenReturn(false);
         when(hallRepository.save(any(Hall.class))).thenAnswer(invocation -> {
             Hall hall = invocation.getArgument(0);
@@ -66,7 +76,7 @@ class HallServiceTest {
             return seats;
         });
 
-        HallDTO result = hallService.createHall(dto);
+        HallDTO result = hallService.createHall(dto, "manager");
 
         ArgumentCaptor<List<Seat>> seatsCaptor = listCaptor();
         verify(seatRepository).saveAll(seatsCaptor.capture());
@@ -81,14 +91,16 @@ class HallServiceTest {
 
     @Test
     void createHall_rejectsLayoutThatDoesNotCoverEveryCell() {
-        when(theaterRepository.findById(1)).thenReturn(Optional.of(theater(1)));
+        Theater theater = theater(1);
+        when(theaterRepository.findById(1)).thenReturn(Optional.of(theater));
+        allowTheaterManagement("manager", theater);
         when(hallRepository.existsByTheater_IdAndName(1, "一号厅")).thenReturn(false);
         HallCreateDTO incompleteLayout = new HallCreateDTO(
                 1, "一号厅", HallType.BASIC, 2, 2,
                 List.of(cell(1, 1, SeatType.NORMAL), cell(1, 2, SeatType.NORMAL), cell(2, 1, SeatType.NORMAL))
         );
 
-        assertThrows(BusinessException.class, () -> hallService.createHall(incompleteLayout));
+        assertThrows(BusinessException.class, () -> hallService.createHall(incompleteLayout, "manager"));
 
         verify(hallRepository, never()).save(any());
         verify(seatRepository, never()).saveAll(anyList());
@@ -96,12 +108,51 @@ class HallServiceTest {
 
     @Test
     void createHall_rejectsDuplicateHallNameInTheater() {
-        when(theaterRepository.findById(1)).thenReturn(Optional.of(theater(1)));
+        Theater theater = theater(1);
+        when(theaterRepository.findById(1)).thenReturn(Optional.of(theater));
+        allowTheaterManagement("manager", theater);
         when(hallRepository.existsByTheater_IdAndName(1, "一号厅")).thenReturn(true);
 
-        assertThrows(BusinessException.class, () -> hallService.createHall(validDto()));
+        assertThrows(BusinessException.class, () -> hallService.createHall(validDto(), "manager"));
 
         verify(hallRepository, never()).save(any());
+    }
+
+    @Test
+    void createHall_rejectsTheaterAdminWhoDoesNotManageTargetTheater() {
+        Theater theater = theater(1);
+        when(theaterRepository.findById(1)).thenReturn(Optional.of(theater));
+        User otherTheaterAdmin = user(10L, UserRole.THEATER_ADMIN);
+        when(userRepository.findByUsername("other-manager")).thenReturn(Optional.of(otherTheaterAdmin));
+        when(theaterAdminRepository.existsByUser_IdAndTheater_Id(10L, 1)).thenReturn(false);
+
+        assertThrows(BusinessException.class, () -> hallService.createHall(validDto(), "other-manager"));
+
+        verify(hallRepository, never()).save(any());
+    }
+
+    @Test
+    void updateHall_allowsAssignedAdminToChangeHallMetadata() {
+        Theater theater = theater(1);
+        Hall hall = new Hall();
+        hall.setId(301);
+        hall.setTheater(theater);
+        hall.setName("旧名称");
+        hall.setType(HallType.BASIC);
+        hall.setStatus("ACTIVE");
+        hall.setRowCount(1);
+        hall.setColumnCount(1);
+        when(hallRepository.findById(301)).thenReturn(Optional.of(hall));
+        allowTheaterManagement("manager", theater);
+        when(hallRepository.existsByTheater_IdAndNameAndIdNot(1, "新名称", 301)).thenReturn(false);
+        when(hallRepository.save(hall)).thenReturn(hall);
+        when(seatRepository.findAllByHall_IdOrderByXAscYAsc(301)).thenReturn(List.of());
+
+        HallDTO result = hallService.updateHall(301, new HallUpdateDTO("新名称", HallType.IMAX, "INACTIVE"), "manager");
+
+        assertEquals("新名称", result.name());
+        assertEquals(HallType.IMAX, result.type());
+        assertEquals("INACTIVE", result.status());
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -123,5 +174,18 @@ class HallServiceTest {
         Theater theater = new Theater();
         theater.setId(id);
         return theater;
+    }
+
+    private void allowTheaterManagement(String username, Theater theater) {
+        User user = user(10L, UserRole.THEATER_ADMIN);
+        when(userRepository.findByUsername(username)).thenReturn(Optional.of(user));
+        when(theaterAdminRepository.existsByUser_IdAndTheater_Id(user.getId(), theater.getId())).thenReturn(true);
+    }
+
+    private User user(Long id, UserRole role) {
+        User user = new User();
+        user.setId(id);
+        user.setUserRole(role);
+        return user;
     }
 }

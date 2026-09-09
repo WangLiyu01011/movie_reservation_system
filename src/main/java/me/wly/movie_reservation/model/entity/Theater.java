@@ -2,8 +2,6 @@ package me.wly.movie_reservation.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import me.wly.movie_reservation.model.enum_class.HallType;
-import org.springframework.data.repository.cdi.Eager;
 
 
 import java.util.ArrayList;

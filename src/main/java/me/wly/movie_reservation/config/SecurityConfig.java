@@ -20,8 +20,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-import java.net.http.HttpRequest;
-
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -46,9 +44,14 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/users/customer/register",
-                                "/api/v1/users/customer/login",
-                                "/api/v1/theaters"
-                        ).hasRole("SYSTEM_ADMIN")
+                                "/api/v1/users/customer/login"
+                        ).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/theaters", "/api/v1/theaters/*/admins")
+                        .hasRole("SYSTEM_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/halls")
+                        .hasAnyRole("SYSTEM_ADMIN", "THEATER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/halls/*")
+                        .hasAnyRole("SYSTEM_ADMIN", "THEATER_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)

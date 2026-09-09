@@ -5,15 +5,20 @@ import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.common.exception.ResultCode;
 import me.wly.movie_reservation.model.dto.HallCreateDTO;
 import me.wly.movie_reservation.model.dto.HallDTO;
+import me.wly.movie_reservation.model.dto.HallUpdateDTO;
 import me.wly.movie_reservation.model.dto.SeatCellCreateDTO;
 import me.wly.movie_reservation.model.dto.SeatCellDTO;
 import me.wly.movie_reservation.model.entity.Hall;
 import me.wly.movie_reservation.model.entity.Seat;
 import me.wly.movie_reservation.model.entity.Theater;
+import me.wly.movie_reservation.model.entity.User;
 import me.wly.movie_reservation.model.enum_class.SeatType;
+import me.wly.movie_reservation.model.enum_class.UserRole;
 import me.wly.movie_reservation.repository.HallRepository;
 import me.wly.movie_reservation.repository.SeatRepository;
+import me.wly.movie_reservation.repository.TheaterAdminRepository;
 import me.wly.movie_reservation.repository.TheaterRepository;
+import me.wly.movie_reservation.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,14 +32,17 @@ public class HallService {
     private final HallRepository hallRepository;
     private final TheaterRepository theaterRepository;
     private final SeatRepository seatRepository;
+    private final UserRepository userRepository;
+    private final TheaterAdminRepository theaterAdminRepository;
 
     @Transactional
-    public HallDTO createHall(HallCreateDTO dto) {
+    public HallDTO createHall(HallCreateDTO dto, String username) {
         Theater theater = theaterRepository.findById(dto.theaterId())
                 .orElseThrow(() -> new BusinessException(
                         ResultCode.THEATER_NOT_FOUND,
                         "Target theater not found: " + dto.theaterId()
                 ));
+        assertCanManageTheater(username, theater);
         if (hallRepository.existsByTheater_IdAndName(theater.getId(), dto.name())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Hall name already exists in this theater");
         }
@@ -65,6 +73,23 @@ public class HallService {
                 savedHall.getColumnCount(),
                 savedSeats.stream().map(this::toSeatCellDTO).toList()
         );
+    }
+
+    @Transactional
+    public HallDTO updateHall(Integer hallId, HallUpdateDTO dto, String username) {
+        Hall hall = hallRepository.findById(hallId)
+                .orElseThrow(() -> new BusinessException(ResultCode.HALL_NOT_FOUND, "Target hall not found: " + hallId));
+        assertCanManageTheater(username, hall.getTheater());
+        if (hallRepository.existsByTheater_IdAndNameAndIdNot(hall.getTheater().getId(), dto.name(), hallId)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Hall name already exists in this theater");
+        }
+
+        hall.setName(dto.name());
+        hall.setType(dto.type());
+        hall.setStatus(dto.status());
+        Hall savedHall = hallRepository.save(hall);
+        List<Seat> seats = seatRepository.findAllByHall_IdOrderByXAscYAsc(savedHall.getId());
+        return toHallDTO(savedHall, seats);
     }
 
     private void validateSeatLayout(HallCreateDTO dto) {
@@ -110,6 +135,31 @@ public class HallService {
                 seat.getSeatLabel(),
                 seat.getSeatType()
         );
+    }
+
+    private HallDTO toHallDTO(Hall hall, List<Seat> seats) {
+        return new HallDTO(
+                hall.getId(),
+                hall.getTheater().getId(),
+                hall.getName(),
+                hall.getType(),
+                hall.getStatus(),
+                hall.getRowCount(),
+                hall.getColumnCount(),
+                seats.stream().map(this::toSeatCellDTO).toList()
+        );
+    }
+
+    private void assertCanManageTheater(String username, Theater theater) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND, "Current user not found"));
+        if (user.getUserRole() == UserRole.SYSTEM_ADMIN) {
+            return;
+        }
+        if (user.getUserRole() != UserRole.THEATER_ADMIN
+                || !theaterAdminRepository.existsByUser_IdAndTheater_Id(user.getId(), theater.getId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "No permission to manage this theater");
+        }
     }
 
     private String toSeatLabel(int row, int column) {

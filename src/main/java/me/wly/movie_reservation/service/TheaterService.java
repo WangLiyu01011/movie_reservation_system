@@ -40,7 +40,6 @@ public class TheaterService {
         theater.setDistrict(district);
         theater.setTheaterName(dto.theaterName());
         theater.setLocation(dto.location());
-        theater.setHallTypesContain(dto.hallTypesContain().stream().distinct().toList());
 
         Theater savedTheater = theaterRepository.save(theater);
         return toCreateVO(savedTheater);
@@ -73,8 +72,7 @@ public class TheaterService {
                 theater.getDistrict().getId(),
                 theater.getDistrict().getName(),
                 theater.getTheaterName(),
-                theater.getLocation(),
-                theater.getHallTypesContain()
+                theater.getLocation()
         );
     }
 

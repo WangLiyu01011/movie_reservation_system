@@ -4,7 +4,6 @@ import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.model.dto.TheaterCreateDTO;
 import me.wly.movie_reservation.model.entity.Area;
 import me.wly.movie_reservation.model.entity.Theater;
-import me.wly.movie_reservation.model.enum_class.HallType;
 import me.wly.movie_reservation.model.vo.TheaterCreateVO;
 import me.wly.movie_reservation.repository.AreaRepository;
 import me.wly.movie_reservation.repository.TheaterRepository;
@@ -15,7 +14,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,13 +34,10 @@ class TheaterServiceTest {
     private TheaterService theaterService;
 
     @Test
-    void createTheater_savesTheaterWithValidatedAreaAndSupportedHallTypes() {
+    void createTheater_savesTheaterWithValidatedArea() {
         Area city = area(100, "杭州市", 10, (short) 1);
         Area district = area(101, "西湖区", 100, (short) 2);
-        TheaterCreateDTO dto = new TheaterCreateDTO(
-                100, 101, "西湖影城", "文三路 100 号",
-                List.of(HallType.BASIC, HallType.IMAX, HallType.IMAX)
-        );
+        TheaterCreateDTO dto = new TheaterCreateDTO(100, 101, "西湖影城", "文三路 100 号");
         when(areaRepository.findById(100)).thenReturn(Optional.of(city));
         when(areaRepository.findById(101)).thenReturn(Optional.of(district));
         when(theaterRepository.existsByDistrict_IdAndTheaterName(101, "西湖影城")).thenReturn(false);
@@ -59,7 +54,6 @@ class TheaterServiceTest {
         Theater savedTheater = theaterCaptor.getValue();
         assertEquals(city, savedTheater.getCity());
         assertEquals(district, savedTheater.getDistrict());
-        assertEquals(List.of(HallType.BASIC, HallType.IMAX), savedTheater.getHallTypesContain());
         assertEquals(501, result.id());
         assertEquals("杭州市", result.cityName());
         assertEquals("西湖区", result.districtName());
@@ -91,7 +85,7 @@ class TheaterServiceTest {
     }
 
     private TheaterCreateDTO validDto() {
-        return new TheaterCreateDTO(100, 101, "西湖影城", "文三路 100 号", List.of(HallType.BASIC));
+        return new TheaterCreateDTO(100, 101, "西湖影城", "文三路 100 号");
     }
 
     private Area area(int id, String name, int parentId, short level) {
