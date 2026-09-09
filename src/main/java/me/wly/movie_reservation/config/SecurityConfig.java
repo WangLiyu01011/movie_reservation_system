@@ -7,6 +7,7 @@ import me.wly.movie_reservation.common.utils.JwtUtil;
 import me.wly.movie_reservation.service.MyUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -18,6 +19,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import java.net.http.HttpRequest;
 
 @Configuration
 @EnableWebSecurity
@@ -34,16 +37,18 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/v1/users/customer/register",
-                                "/api/v1/users/customer/login",
-                                "/api/v1/users/register",
-                                "/api/v1/users/login",
+                                HttpMethod.GET,
                                 "/api/v1/movies/**",
-                                "/api/v1/theaters/**",
+                                "/api/v1/theaters",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/users/customer/register",
+                                "/api/v1/users/customer/login",
+                                "/api/v1/theaters"
+                        ).hasRole("SYSTEM_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)

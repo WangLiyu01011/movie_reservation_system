@@ -20,7 +20,7 @@ import java.util.List;
 public class TheaterController {
     private final TheaterService theaterService;
 
-    @PostMapping
+    @PostMapping()
     public ResponseEntity<ApiResponse<TheaterCreateVO>> createTheater(@Valid @RequestBody TheaterCreateDTO dto) {
         TheaterCreateVO theater = theaterService.createTheater(dto);
         return new ResponseEntity<>(ApiResponse.success(theater), HttpStatus.CREATED);

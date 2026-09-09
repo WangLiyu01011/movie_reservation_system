@@ -22,7 +22,7 @@ public class MyUserDetailsService implements UserDetailsService {
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
-                Collections.singletonList(new SimpleGrantedAuthority("Role_" + user.getUserRole().name()))
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getUserRole().name()))
         );
     }
 }

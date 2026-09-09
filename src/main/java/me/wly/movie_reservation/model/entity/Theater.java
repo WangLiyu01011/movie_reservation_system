@@ -3,8 +3,10 @@ package me.wly.movie_reservation.model.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import me.wly.movie_reservation.model.enum_class.HallType;
-import me.wly.movie_reservation.common.utils.HallTypeListConverter;
+import org.springframework.data.repository.cdi.Eager;
 
+
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -26,10 +28,11 @@ public class Theater {
     private String theaterName;
     private String location;
 
-    /**
-     * 影院声明可创建的影厅类型；实际影厅类型仍以 Hall.type 为准。
-     */
-    @Convert(converter = HallTypeListConverter.class)
-    @Column(name = "hall_types_contain", nullable = false)
-    private List<HallType> hallTypesContain;
+    @OneToMany(cascade = CascadeType.ALL,
+               fetch = FetchType.EAGER,
+               mappedBy = "theater",
+               orphanRemoval = true
+    )
+    private List<Hall> Halls= new ArrayList<>();
+
 }
