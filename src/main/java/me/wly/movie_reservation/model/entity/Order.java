@@ -58,6 +58,7 @@ public class Order {
     private BigDecimal totalPrice;
     @Enumerated(EnumType.STRING)
     private OrderStatus status;
+    @Column(insertable = false, updatable = false)
     private LocalDateTime expiresAt;
     private LocalDateTime paidAt;
     private LocalDateTime cancelledAt;

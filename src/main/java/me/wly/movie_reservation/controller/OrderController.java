@@ -4,7 +4,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.common.utils.ApiResponse;
 import me.wly.movie_reservation.model.dto.OrderCreateDTO;
-import me.wly.movie_reservation.model.vo.OrderGenerateVO;
+import me.wly.movie_reservation.model.dto.OrderPayDTO;
+import me.wly.movie_reservation.model.vo.OrderCreateVO;
+import me.wly.movie_reservation.model.vo.OrderPayVO;
 import me.wly.movie_reservation.model.vo.OrderVO;
 import me.wly.movie_reservation.service.OrderService;
 import org.springframework.http.HttpStatus;
@@ -27,15 +29,19 @@ public class OrderController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<OrderGenerateVO>> generateOrder(@Valid @RequestBody OrderCreateDTO dto, @AuthenticationPrincipal UserDetails userDetails) {
-        OrderGenerateVO orderGenerateVO = orderService.generateOrder(dto, userDetails.getUsername());
-        return new ResponseEntity<>(ApiResponse.success(orderGenerateVO), HttpStatus.CREATED);
+    public ResponseEntity<ApiResponse<OrderCreateVO>> generateOrder(@Valid @RequestBody OrderCreateDTO dto, @AuthenticationPrincipal UserDetails userDetails) {
+        OrderCreateVO orderCreateVO = orderService.createOrder(dto, userDetails.getUsername());
+        return new ResponseEntity<>(ApiResponse.success(orderCreateVO), HttpStatus.CREATED);
     }
 
-//    @PostMapping(path = "/payment")
-//    public ResponseEntity<ApiResponse<String>> orderPayment(@Valid @RequestBody OrderPaymentDTO dto, @AuthenticationPrincipal UserDetails userDetails) {
-//
-//
-//    }
+    @PostMapping(path = "/{orderCode}/payments")
+    public ResponseEntity<ApiResponse<OrderPayVO>> payOrder(
+            @PathVariable String orderCode,
+            @Valid @RequestBody OrderPayDTO dto,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        OrderPayVO payment = orderService.payOrder(orderCode, dto, userDetails.getUsername());
+        return new ResponseEntity<>(ApiResponse.success(payment), HttpStatus.CREATED);
+    }
 
 }

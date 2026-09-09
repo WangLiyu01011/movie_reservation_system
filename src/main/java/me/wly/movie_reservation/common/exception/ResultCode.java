@@ -9,6 +9,7 @@ public enum ResultCode {
     MOVIE_NOT_FOUND(40402,"Movie Not Found"),
     THEATER_NOT_FOUND(40403,"Theater Not Found"),
     HALL_NOT_FOUND(40404,"Hall Not Found"),
+    ORDER_NOT_FOUND(40405,"Order Not Found"),
     INTERNAL_SERVER_ERROR(500,"Internal Server Error");
 
     private final int code;

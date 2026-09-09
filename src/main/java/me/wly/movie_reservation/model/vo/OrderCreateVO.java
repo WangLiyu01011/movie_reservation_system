@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public record OrderGenerateVO(
+public record OrderCreateVO(
         String orderCode,
         OrderStatus status,
         BigDecimal totalPrice,

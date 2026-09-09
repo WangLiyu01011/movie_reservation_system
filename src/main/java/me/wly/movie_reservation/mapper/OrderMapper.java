@@ -2,7 +2,7 @@ package me.wly.movie_reservation.mapper;
 
 import me.wly.movie_reservation.model.entity.Order;
 import me.wly.movie_reservation.model.entity.OrderSeat;
-import me.wly.movie_reservation.model.vo.OrderGenerateVO;
+import me.wly.movie_reservation.model.vo.OrderCreateVO;
 import me.wly.movie_reservation.model.vo.OrderSeatVO;
 import me.wly.movie_reservation.model.vo.OrderVO;
 import org.mapstruct.Mapper;
@@ -18,7 +18,7 @@ public interface OrderMapper {
 
     @Mapping(source = "code", target = "orderCode")
     @Mapping(source = "orderSeats", target = "seats")
-    OrderGenerateVO toCreateVO(Order order);
+    OrderCreateVO toCreateVO(Order order);
 
     @Mapping(source = "showtimeSeat.seatLabelSnapshot", target = "seatLabel")
     @Mapping(source = "showtimeSeat.seatTypeSnapshot", target = "seatType")

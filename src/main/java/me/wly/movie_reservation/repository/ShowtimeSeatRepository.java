@@ -25,4 +25,12 @@ public interface ShowtimeSeatRepository extends JpaRepository<ShowtimeSeat, Long
             @Param("showtimeId") Long showtimeId,
             @Param("seatIds") Collection<Long> seatIds
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select showtimeSeat from ShowtimeSeat showtimeSeat
+            where showtimeSeat.order.id = :orderId
+              and showtimeSeat.status = me.wly.movie_reservation.model.enum_class.SeatStatus.LOCKED
+            """)
+    List<ShowtimeSeat> findLockedByOrderIdForUpdate(@Param("orderId") Long orderId);
 }

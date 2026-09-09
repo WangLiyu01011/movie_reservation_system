@@ -48,7 +48,7 @@ public class GlobalExceptionHandler {
             case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
             case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
             case FORBIDDEN -> HttpStatus.FORBIDDEN;
-            case USER_NOT_FOUND, MOVIE_NOT_FOUND, THEATER_NOT_FOUND, HALL_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case USER_NOT_FOUND, MOVIE_NOT_FOUND, THEATER_NOT_FOUND, HALL_NOT_FOUND, ORDER_NOT_FOUND -> HttpStatus.NOT_FOUND;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }

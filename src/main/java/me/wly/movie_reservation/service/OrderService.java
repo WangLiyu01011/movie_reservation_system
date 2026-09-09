@@ -1,17 +1,23 @@
 package me.wly.movie_reservation.service;
 
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.common.exception.ResultCode;
 import me.wly.movie_reservation.mapper.OrderMapper;
 import me.wly.movie_reservation.model.dto.OrderCreateDTO;
+import me.wly.movie_reservation.model.dto.OrderPayDTO;
 import me.wly.movie_reservation.model.entity.Order;
 import me.wly.movie_reservation.model.entity.OrderSeat;
+import me.wly.movie_reservation.model.entity.PaymentTransaction;
 import me.wly.movie_reservation.model.entity.Showtime;
 import me.wly.movie_reservation.model.entity.ShowtimeSeat;
 import me.wly.movie_reservation.model.entity.User;
+import me.wly.movie_reservation.model.enum_class.OrderStatus;
+import me.wly.movie_reservation.model.enum_class.PaymentStatus;
 import me.wly.movie_reservation.model.enum_class.SeatStatus;
-import me.wly.movie_reservation.model.vo.OrderGenerateVO;
+import me.wly.movie_reservation.model.vo.OrderCreateVO;
+import me.wly.movie_reservation.model.vo.OrderPayVO;
 import me.wly.movie_reservation.model.vo.OrderVO;
 import me.wly.movie_reservation.repository.*;
 import org.springframework.stereotype.Service;
@@ -30,6 +36,8 @@ public class OrderService {
     private final UserRepository userRepository;
     private final OrderMapper orderMapper;
     private final ShowtimeRepository showtimeRepository;
+    private final PaymentTransactionRepository paymentTransactionRepository;
+    private final EntityManager entityManager;
 
     public List<OrderVO> getOrderByUserCode(String code) {
         User user = userRepository.getUserByCode(code);
@@ -38,7 +46,7 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderGenerateVO generateOrder(OrderCreateDTO dto, String username) {
+    public OrderCreateVO createOrder(OrderCreateDTO dto, String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND, "User not found"));
 
@@ -72,8 +80,6 @@ public class OrderService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Showtime price is invalid");
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime expiresAt = now.plusMinutes(5);
 
         Order created = new Order();
         created.setUser(user);
@@ -84,9 +90,6 @@ public class OrderService {
         created.setHallName(showtime.getHallName());
         created.setStartTime(showtime.getStartTime());
         created.setEndTime(showtime.getEndTime());
-        created.setCreatedAt(now);
-        created.setUpdatedAt(now);
-        created.setExpiresAt(expiresAt);
         created.setTotalPrice(ticketPrice.multiply(BigDecimal.valueOf(showtimeSeats.size())));
 
         for (ShowtimeSeat showtimeSeat : showtimeSeats) {
@@ -96,7 +99,9 @@ public class OrderService {
             created.addOrderSeat(orderSeat);
         }
 
-        Order savedOrder = orderRepository.save(created);
+        Order savedOrder = orderRepository.saveAndFlush(created);
+        entityManager.refresh(savedOrder);
+        LocalDateTime expiresAt = savedOrder.getExpiresAt();
         for (ShowtimeSeat showtimeSeat : showtimeSeats) {
             showtimeSeat.setStatus(SeatStatus.LOCKED);
             showtimeSeat.setOrder(savedOrder);
@@ -107,7 +112,78 @@ public class OrderService {
         return orderMapper.toCreateVO(created);
     }
 
-//    public String payOrder(OrderPaymentDTO dto, String username) {
-//
-//    }
+    @Transactional(noRollbackFor = BusinessException.class)
+    public OrderPayVO payOrder(String orderCode, OrderPayDTO dto, String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND, "User not found"));
+        Order order = orderRepository.findByCodeAndUserIdForUpdate(orderCode, user.getId())
+                .orElseThrow(() -> new BusinessException(ResultCode.ORDER_NOT_FOUND, "Order not found"));
+
+        LocalDateTime now = LocalDateTime.now();
+        if (order.getStatus() == OrderStatus.PENDING_PAYMENT
+                && (order.getExpiresAt() == null || !order.getExpiresAt().isAfter(now))) {
+            expireOrder(order, now);
+        }
+        if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Order cannot be paid in status: " + order.getStatus());
+        }
+        if (order.getTotalPrice() == null || order.getTotalPrice().signum() < 0) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Order amount is invalid");
+        }
+
+        PaymentTransaction sameRequest = paymentTransactionRepository
+                .findByOrder_IdAndRequestId(order.getId(), dto.requestId())
+                .orElse(null);
+        if (sameRequest != null) {
+            return toOrderPayVO(sameRequest);
+        }
+
+        /* Avoid more than one PaymentTransaction related to one order */
+        PaymentTransaction activePayment = paymentTransactionRepository
+                .findFirstByOrder_IdAndStatusInOrderByIdDesc(order.getId(), List.of(PaymentStatus.CREATED, PaymentStatus.PAYING))
+                .orElse(null);
+        if (activePayment != null) {
+            return toOrderPayVO(activePayment);
+        }
+
+        PaymentTransaction payment = new PaymentTransaction();
+        payment.setOrder(order);
+        payment.setRequestId(dto.requestId());
+        payment.setChannel(dto.channel().trim().toUpperCase());
+        payment.setAmount(order.getTotalPrice());
+        payment.setStatus(PaymentStatus.CREATED);
+        PaymentTransaction savedPayment = paymentTransactionRepository.save(payment);
+
+        return toOrderPayVO(savedPayment);
+    }
+
+    private void expireOrder(Order order, LocalDateTime now) {
+        order.setStatus(OrderStatus.EXPIRED);
+        order.setCancelledAt(now);
+        order.setUpdatedAt(now);
+
+        List<ShowtimeSeat> lockedSeats = showtimeSeatRepository.findLockedByOrderIdForUpdate(order.getId());
+        for (ShowtimeSeat seat : lockedSeats) {
+            seat.setStatus(SeatStatus.AVAILABLE);
+            seat.setOrder(null);
+            seat.setLockToken(null);
+            seat.setLockUntil(null);
+        }
+
+        List<PaymentTransaction> activePayments = paymentTransactionRepository.findAllByOrder_IdAndStatusIn(
+                order.getId(), List.of(PaymentStatus.CREATED, PaymentStatus.PAYING)
+        );
+        activePayments.forEach(payment -> payment.setStatus(PaymentStatus.CLOSED));
+    }
+
+    private OrderPayVO toOrderPayVO(PaymentTransaction payment) {
+        return new OrderPayVO(
+                payment.getPaymentNo(),
+                payment.getOrder().getCode(),
+                payment.getChannel(),
+                payment.getAmount(),
+                payment.getStatus(),
+                payment.getOrder().getExpiresAt()
+        );
+    }
 }
