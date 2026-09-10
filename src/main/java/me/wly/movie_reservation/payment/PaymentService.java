@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.common.exception.ResultCode;
+import me.wly.movie_reservation.order.OrderExpirationService;
 import me.wly.movie_reservation.order.OrderRepository;
 import me.wly.movie_reservation.order.model.Order;
 import me.wly.movie_reservation.order.model.OrderStatus;
@@ -14,9 +15,6 @@ import me.wly.movie_reservation.payment.gateway.PaymentCreateResult;
 import me.wly.movie_reservation.payment.model.PaymentStatus;
 import me.wly.movie_reservation.payment.model.PaymentTransaction;
 import me.wly.movie_reservation.payment.vo.PaymentRequestVO;
-import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
-import me.wly.movie_reservation.showtime.model.SeatStatus;
-import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
 import me.wly.movie_reservation.user.UserRepository;
 import me.wly.movie_reservation.user.model.User;
 import org.springframework.stereotype.Service;
@@ -34,11 +32,11 @@ public class PaymentService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
-    private final ShowtimeSeatRepository showtimeSeatRepository;
+    private final OrderExpirationService orderExpirationService;
     private final MockPaymentGateway mockPaymentGateway;
     private final EntityManager entityManager;
 
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public PaymentRequestVO createPayment(PaymentRequestDTO dto, String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND, "User not found"));
@@ -46,9 +44,8 @@ public class PaymentService {
                 .orElseThrow(() -> new BusinessException(ResultCode.ORDER_NOT_FOUND, "Order not found"));
 
         LocalDateTime now = LocalDateTime.now();
-        if (order.getStatus() == OrderStatus.PENDING_PAYMENT
-                && (order.getExpiresAt() == null || !order.getExpiresAt().isAfter(now))) {
-            expireOrder(order, now);
+        if (orderExpirationService.expireLockedOrder(order, now)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Order has expired");
         }
         if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
             throw new BusinessException(
@@ -89,25 +86,6 @@ public class PaymentService {
         saved.setStatus(PaymentStatus.PAYING);
 
         return toPaymentRequestVO(saved);
-    }
-
-    private void expireOrder(Order order, LocalDateTime now) {
-        order.setStatus(OrderStatus.EXPIRED);
-        order.setCancelledAt(now);
-        order.setUpdatedAt(now);
-
-        List<ShowtimeSeat> lockedSeats = showtimeSeatRepository.findLockedByOrderIdForUpdate(order.getId());
-        for (ShowtimeSeat seat : lockedSeats) {
-            seat.setStatus(SeatStatus.AVAILABLE);
-            seat.setOrder(null);
-            seat.setLockToken(null);
-            seat.setLockUntil(null);
-        }
-
-        List<PaymentTransaction> activePayments = paymentTransactionRepository.findAllByOrder_IdAndStatusIn(
-                order.getId(), ACTIVE_PAYMENT_STATUSES
-        );
-        activePayments.forEach(payment -> payment.setStatus(PaymentStatus.CLOSED));
     }
 
     private PaymentRequestVO toPaymentRequestVO(PaymentTransaction payment) {

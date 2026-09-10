@@ -2,7 +2,9 @@ package me.wly.movie_reservation.payment;
 
 import me.wly.movie_reservation.payment.model.PaymentStatus;
 import me.wly.movie_reservation.payment.model.PaymentTransaction;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -22,5 +24,6 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             Collection<PaymentStatus> statuses
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<PaymentTransaction> findAllByOrder_IdAndStatusIn(Long orderId, Collection<PaymentStatus> statuses);
 }

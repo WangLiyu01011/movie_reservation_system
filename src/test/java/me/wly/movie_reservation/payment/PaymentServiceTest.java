@@ -2,6 +2,7 @@ package me.wly.movie_reservation.payment;
 
 import jakarta.persistence.EntityManager;
 import me.wly.movie_reservation.common.exception.BusinessException;
+import me.wly.movie_reservation.order.OrderExpirationService;
 import me.wly.movie_reservation.order.OrderRepository;
 import me.wly.movie_reservation.order.model.Order;
 import me.wly.movie_reservation.order.model.OrderStatus;
@@ -12,9 +13,6 @@ import me.wly.movie_reservation.payment.gateway.PaymentCreateResult;
 import me.wly.movie_reservation.payment.model.PaymentStatus;
 import me.wly.movie_reservation.payment.model.PaymentTransaction;
 import me.wly.movie_reservation.payment.vo.PaymentRequestVO;
-import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
-import me.wly.movie_reservation.showtime.model.SeatStatus;
-import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
 import me.wly.movie_reservation.user.UserRepository;
 import me.wly.movie_reservation.user.model.User;
 import org.junit.jupiter.api.Test;
@@ -30,7 +28,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,7 +45,7 @@ class PaymentServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
-    private ShowtimeSeatRepository showtimeSeatRepository;
+    private OrderExpirationService orderExpirationService;
     @Mock
     private MockPaymentGateway mockPaymentGateway;
     @Mock
@@ -143,32 +140,18 @@ class PaymentServiceTest {
     }
 
     @Test
-    void createPayment_expiresOrderReleasesSeatsAndClosesActivePayments() {
+    void createPayment_delegatesExpiredOrderToExpirationService() {
         User user = user(10L, "customer");
         Order order = order(500L, "odr_expired", user, LocalDateTime.now().minusSeconds(1));
-        ShowtimeSeat lockedSeat = new ShowtimeSeat();
-        lockedSeat.setStatus(SeatStatus.LOCKED);
-        lockedSeat.setOrder(order);
-        lockedSeat.setLockToken("order-request");
-        lockedSeat.setLockUntil(order.getExpiresAt());
-        PaymentTransaction active = payment(701L, "pay_active", order, "old-request", PaymentStatus.PAYING);
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
         when(orderRepository.findByCodeAndUserIdForUpdate("odr_expired", 10L)).thenReturn(Optional.of(order));
-        when(showtimeSeatRepository.findLockedByOrderIdForUpdate(500L)).thenReturn(List.of(lockedSeat));
-        when(paymentTransactionRepository.findAllByOrder_IdAndStatusIn(
-                eq(500L), eq(List.of(PaymentStatus.CREATED, PaymentStatus.PAYING))))
-                .thenReturn(List.of(active));
+        when(orderExpirationService.expireLockedOrder(eq(order), any(LocalDateTime.class))).thenReturn(true);
 
         assertThrows(BusinessException.class, () -> paymentService.createPayment(
                 new PaymentRequestDTO("odr_expired", "ALIPAY", "new-request"), "customer"
         ));
 
-        assertEquals(OrderStatus.EXPIRED, order.getStatus());
-        assertEquals(SeatStatus.AVAILABLE, lockedSeat.getStatus());
-        assertNull(lockedSeat.getOrder());
-        assertNull(lockedSeat.getLockToken());
-        assertNull(lockedSeat.getLockUntil());
-        assertEquals(PaymentStatus.CLOSED, active.getStatus());
+        verify(orderExpirationService).expireLockedOrder(eq(order), any(LocalDateTime.class));
         verify(paymentTransactionRepository, never()).save(any());
     }
 
