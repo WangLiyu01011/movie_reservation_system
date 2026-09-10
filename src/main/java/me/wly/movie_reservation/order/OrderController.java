@@ -20,9 +20,9 @@ import java.util.List;
 public class OrderController {
     private final OrderService orderService;
 
-    @GetMapping("/{userCode}")
-    public ResponseEntity<ApiResponse<List<OrderVO>>> getOrders(@PathVariable String userCode) {
-        return new ResponseEntity<ApiResponse<List<OrderVO>>>(ApiResponse.success(orderService.getOrderByUserCode(userCode)), HttpStatus.OK);
+    @GetMapping()
+    public ResponseEntity<ApiResponse<List<OrderVO>>> getOrders(@AuthenticationPrincipal UserDetails userDetails) {
+        return new ResponseEntity<ApiResponse<List<OrderVO>>>(ApiResponse.success(orderService.getOrderByUsername(userDetails.getUsername())), HttpStatus.OK);
     }
 
     @PostMapping

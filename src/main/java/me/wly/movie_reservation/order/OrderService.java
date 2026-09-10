@@ -34,8 +34,8 @@ public class OrderService {
     private final ShowtimeRepository showtimeRepository;
     private final EntityManager entityManager;
 
-    public List<OrderVO> getOrderByUserCode(String code) {
-        User user = userRepository.getUserByCode(code);
+    public List<OrderVO> getOrderByUsername(String username) {
+        User user = userRepository.getUserByUsername(username);
         List<Order> orders = orderRepository.getOrdersByUser(user);
         return orderMapper.toVOList(orders);
     }

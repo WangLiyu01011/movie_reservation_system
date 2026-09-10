@@ -11,5 +11,7 @@ public record OrderVO(
         List<String> seatLocations,
         BigDecimal totalPrice,
         LocalDateTime startTime,
-        LocalDateTime endTime
+        LocalDateTime endTime,
+        LocalDateTime createdAt,
+        LocalDateTime paidAt
 ) {}

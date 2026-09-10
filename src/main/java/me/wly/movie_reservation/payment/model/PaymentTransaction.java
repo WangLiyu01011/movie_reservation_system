@@ -42,7 +42,7 @@ public class PaymentTransaction {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
-    /** Front-end generated idempotency key for initiating a payment. */
+    /** Front-end generated idempotency key */
     @Column(name = "request_id", nullable = false, length = 64)
     private String requestId;
 
@@ -71,6 +71,13 @@ public class PaymentTransaction {
 
     @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
+
+    @Column(name = "expires_at", insertable = false)
+    private LocalDateTime expiresAt;
+
+    /** Provider-issued checkout URL. Do not write its tokenized value to application logs. */
+    @Column(name = "pay_url", length = 2048)
+    private String payUrl;
 
     @PrePersist
     public void prePersist() {

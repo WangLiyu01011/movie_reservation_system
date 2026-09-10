@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
-import org.hibernate.Length;
 
 import java.math.BigDecimal;
 

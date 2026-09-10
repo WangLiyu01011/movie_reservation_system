@@ -30,7 +30,7 @@ public interface ShowtimeSeatRepository extends JpaRepository<ShowtimeSeat, Long
     @Query("""
             select showtimeSeat from ShowtimeSeat showtimeSeat
             where showtimeSeat.order.id = :orderId
-              and showtimeSeat.status = me.wly.movie_reservation.showtime.model.SeatStatus.LOCKED
+              and showtimeSeat.status = SeatStatus.LOCKED
             """)
     List<ShowtimeSeat> findLockedByOrderIdForUpdate(@Param("orderId") Long orderId);
 }

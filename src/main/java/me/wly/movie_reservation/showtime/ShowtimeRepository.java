@@ -1,6 +1,5 @@
 package me.wly.movie_reservation.showtime;
 
-import jakarta.validation.constraints.NotNull;
 import me.wly.movie_reservation.showtime.model.Showtime;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;

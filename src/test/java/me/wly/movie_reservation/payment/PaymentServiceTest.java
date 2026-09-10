@@ -1,13 +1,17 @@
 package me.wly.movie_reservation.payment;
 
+import jakarta.persistence.EntityManager;
 import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.order.OrderRepository;
 import me.wly.movie_reservation.order.model.Order;
 import me.wly.movie_reservation.order.model.OrderStatus;
-import me.wly.movie_reservation.payment.dto.OrderPayDTO;
+import me.wly.movie_reservation.payment.dto.PaymentRequestDTO;
+import me.wly.movie_reservation.payment.gateway.MockPaymentGateway;
+import me.wly.movie_reservation.payment.gateway.PaymentCreateCommand;
+import me.wly.movie_reservation.payment.gateway.PaymentCreateResult;
 import me.wly.movie_reservation.payment.model.PaymentStatus;
 import me.wly.movie_reservation.payment.model.PaymentTransaction;
-import me.wly.movie_reservation.payment.vo.OrderPayVO;
+import me.wly.movie_reservation.payment.vo.PaymentRequestVO;
 import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
 import me.wly.movie_reservation.showtime.model.SeatStatus;
 import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
@@ -45,6 +49,10 @@ class PaymentServiceTest {
     private UserRepository userRepository;
     @Mock
     private ShowtimeSeatRepository showtimeSeatRepository;
+    @Mock
+    private MockPaymentGateway mockPaymentGateway;
+    @Mock
+    private EntityManager entityManager;
     @InjectMocks
     private PaymentService paymentService;
 
@@ -52,7 +60,7 @@ class PaymentServiceTest {
     void createPayment_usesServerSideOrderAmount() {
         User user = user(10L, "customer");
         Order order = order(500L, "odr_test", user, LocalDateTime.now().plusMinutes(5));
-        OrderPayDTO dto = new OrderPayDTO("odr_test", " alipay ", "payment-request-1");
+        PaymentRequestDTO dto = new PaymentRequestDTO("odr_test", " alipay ", "payment-request-1");
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
         when(orderRepository.findByCodeAndUserIdForUpdate("odr_test", 10L)).thenReturn(Optional.of(order));
         when(paymentTransactionRepository.findByOrder_IdAndRequestId(500L, "payment-request-1"))
@@ -60,25 +68,37 @@ class PaymentServiceTest {
         when(paymentTransactionRepository.findFirstByOrder_IdAndStatusInOrderByIdDesc(
                 eq(500L), eq(List.of(PaymentStatus.CREATED, PaymentStatus.PAYING))))
                 .thenReturn(Optional.empty());
-        when(paymentTransactionRepository.save(any(PaymentTransaction.class))).thenAnswer(invocation -> {
+        when(paymentTransactionRepository.saveAndFlush(any(PaymentTransaction.class))).thenAnswer(invocation -> {
             PaymentTransaction payment = invocation.getArgument(0);
             payment.setId(700L);
             payment.setPaymentNo("pay_test");
+            payment.setExpiresAt(order.getExpiresAt().plusMinutes(1));
             return payment;
         });
+        when(mockPaymentGateway.createPayment(any(PaymentCreateCommand.class)))
+                .thenReturn(new PaymentCreateResult(
+                        "mock_trade_test",
+                        "http://localhost:8080/api/v1/mock-payments/pay_test",
+                        order.getExpiresAt()
+                ));
 
-        OrderPayVO result = paymentService.createPayment(dto, "customer");
+        PaymentRequestVO result = paymentService.createPayment(dto, "customer");
 
         ArgumentCaptor<PaymentTransaction> paymentCaptor = ArgumentCaptor.forClass(PaymentTransaction.class);
-        verify(paymentTransactionRepository).save(paymentCaptor.capture());
+        verify(paymentTransactionRepository).saveAndFlush(paymentCaptor.capture());
         PaymentTransaction payment = paymentCaptor.getValue();
         assertSame(order, payment.getOrder());
         assertEquals("payment-request-1", payment.getRequestId());
         assertEquals("ALIPAY", payment.getChannel());
         assertEquals(new BigDecimal("100.00"), payment.getAmount());
-        assertEquals(PaymentStatus.CREATED, payment.getStatus());
+        assertEquals(PaymentStatus.PAYING, payment.getStatus());
+        assertEquals("mock_trade_test", payment.getProviderTradeNo());
+        assertEquals("http://localhost:8080/api/v1/mock-payments/pay_test", payment.getPayUrl());
         assertEquals("pay_test", result.paymentNo());
         assertEquals(new BigDecimal("100.00"), result.amount());
+        assertEquals(PaymentStatus.PAYING, result.status());
+        assertEquals(order.getExpiresAt(), result.expiresAt());
+        assertEquals("http://localhost:8080/api/v1/mock-payments/pay_test", result.payUrl());
     }
 
     @Test
@@ -91,8 +111,8 @@ class PaymentServiceTest {
         when(paymentTransactionRepository.findByOrder_IdAndRequestId(500L, "payment-request-1"))
                 .thenReturn(Optional.of(existing));
 
-        OrderPayVO result = paymentService.createPayment(
-                new OrderPayDTO("odr_test", "WECHAT", "payment-request-1"), "customer"
+        PaymentRequestVO result = paymentService.createPayment(
+                new PaymentRequestDTO("odr_test", "WECHAT", "payment-request-1"), "customer"
         );
 
         assertEquals("pay_existing", result.paymentNo());
@@ -113,8 +133,8 @@ class PaymentServiceTest {
                 eq(500L), eq(List.of(PaymentStatus.CREATED, PaymentStatus.PAYING))))
                 .thenReturn(Optional.of(active));
 
-        OrderPayVO result = paymentService.createPayment(
-                new OrderPayDTO("odr_test", "WECHAT", "new-request"), "customer"
+        PaymentRequestVO result = paymentService.createPayment(
+                new PaymentRequestDTO("odr_test", "WECHAT", "new-request"), "customer"
         );
 
         assertEquals("pay_active", result.paymentNo());
@@ -140,7 +160,7 @@ class PaymentServiceTest {
                 .thenReturn(List.of(active));
 
         assertThrows(BusinessException.class, () -> paymentService.createPayment(
-                new OrderPayDTO("odr_expired", "ALIPAY", "new-request"), "customer"
+                new PaymentRequestDTO("odr_expired", "ALIPAY", "new-request"), "customer"
         ));
 
         assertEquals(OrderStatus.EXPIRED, order.getStatus());
