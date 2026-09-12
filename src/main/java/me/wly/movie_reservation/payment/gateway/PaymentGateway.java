@@ -13,4 +13,7 @@ public interface PaymentGateway {
      * PaymentTransaction or ShowtimeSeat entities.</p>
      */
     PaymentCreateResult createPayment(PaymentCreateCommand command);
+
+    /** Verifies a provider callback signature and converts its body into a provider-neutral event. */
+    VerifiedPaymentCallback verifyAndParseCallback(String rawBody, String signature);
 }

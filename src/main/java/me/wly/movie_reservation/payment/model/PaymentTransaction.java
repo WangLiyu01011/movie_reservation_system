@@ -46,7 +46,7 @@ public class PaymentTransaction {
     @Column(name = "request_id", nullable = false, length = 64)
     private String requestId;
 
-    /** Payment provider identifier, such as ALIPAY or WECHAT. */
+    /** Payment provider identifier */
     @Column(nullable = false, length = 32)
     private String channel;
 
@@ -59,6 +59,12 @@ public class PaymentTransaction {
 
     @Column(name = "provider_trade_no", length = 128)
     private String providerTradeNo;
+
+    @Column(name = "failure_code", length = 64)
+    private String failureCode;
+
+    @Column(name = "failure_message", length = 512)
+    private String failureMessage;
 
     @Lob
     @Column(name = "callback_payload", columnDefinition = "LONGTEXT")

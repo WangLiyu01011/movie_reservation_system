@@ -5,6 +5,8 @@ import me.wly.movie_reservation.payment.model.PaymentTransaction;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -14,6 +16,19 @@ import java.util.Optional;
 @Repository
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Long> {
     Optional<PaymentTransaction> findByPaymentNo(String paymentNo);
+
+    @Query("""
+            select payment.order.id from PaymentTransaction payment
+            where payment.paymentNo = :paymentNo
+            """)
+    Optional<Long> findOrderIdByPaymentNo(@Param("paymentNo") String paymentNo);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select payment from PaymentTransaction payment
+            where payment.paymentNo = :paymentNo
+            """)
+    Optional<PaymentTransaction> findByPaymentNoForUpdate(@Param("paymentNo") String paymentNo);
 
     Optional<PaymentTransaction> findByOrder_IdAndRequestId(Long orderId, String requestId);
 

@@ -40,6 +40,10 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
                         ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/payment-callbacks/**"
+                        ).permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/users/customer/register",
                                 "/api/v1/users/customer/login"
