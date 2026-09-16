@@ -17,6 +17,8 @@ import me.wly.movie_reservation.common.exception.BusinessException;
 public class MovieService {
     private final MovieRepository movieRepository;
     private final MovieMapper movieMapper;
+    private final MovieCacheService movieCacheService;
+
     public List<MovieVO>  getMovies(String genre) {
         if(genre == null || genre.isBlank()) {
             List<Movie> movies = movieRepository.findAll();
@@ -30,10 +32,18 @@ public class MovieService {
         }
     }
 
-    public MovieDetailVO singleMovie(String imdbId){
-        Movie movieFound = movieRepository.findMovieByImdbId(imdbId)
-                .orElseThrow(()->new BusinessException(ResultCode.MOVIE_NOT_FOUND, "Movie not found with: " + imdbId));
-        return movieMapper.entityToDetailVO(movieFound);
+    public MovieDetailVO singleMovie(String imdbId) {
+        String normalizedImdbId = imdbId.strip();
+        MovieDetailVO movie = movieCacheService.getOrLoadDetail(
+                normalizedImdbId,
+                () -> movieRepository.findMovieByImdbId(normalizedImdbId)
+                        .map(movieMapper::entityToDetailVO)
+                        .orElse(null)
+        );
+        if (movie == null) {
+            throw movieNotFound(normalizedImdbId);
+        }
+        return movie;
     }
 
     public List<Movie> getUpcomingMovies(){
@@ -46,5 +56,11 @@ public class MovieService {
         return movieRepository.findOnShowingMovies(now);
     }
 
+    private BusinessException movieNotFound(String imdbId) {
+        return new BusinessException(
+                ResultCode.MOVIE_NOT_FOUND,
+                "Movie not found with: " + imdbId
+        );
+    }
 
 }
