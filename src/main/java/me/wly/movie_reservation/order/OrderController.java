@@ -25,8 +25,9 @@ public class OrderController {
         return new ResponseEntity<ApiResponse<List<OrderVO>>>(ApiResponse.success(orderService.getOrderByUsername(userDetails.getUsername())), HttpStatus.OK);
     }
 
+
     @PostMapping
-    public ResponseEntity<ApiResponse<OrderCreateVO>> generateOrder(@Valid @RequestBody OrderCreateDTO dto, @AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<ApiResponse<OrderCreateVO>> createOrder(@Valid @RequestBody OrderCreateDTO dto, @AuthenticationPrincipal UserDetails userDetails) {
         OrderCreateVO orderCreateVO = orderService.createOrder(dto, userDetails.getUsername());
         return new ResponseEntity<>(ApiResponse.success(orderCreateVO), HttpStatus.CREATED);
     }

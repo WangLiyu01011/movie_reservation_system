@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
+import static me.wly.movie_reservation.common.util.RedisScriptLoader.script;
+
 
 @Slf4j
 @Service
@@ -24,12 +26,7 @@ public class MovieCacheService {
     private static final String MOVIE_LOCK_PREFIX = "lock:movie:v1:detail:";
     private static final String NULL_VALUE = "__NULL__";
     private static final Duration REBUILD_LOCK_TTL = Duration.ofSeconds(10);
-    private static final RedisScript<Long> RELEASE_LOCK_SCRIPT = RedisScript.of("""
-            if redis.call('get', KEYS[1]) == ARGV[1] then
-                return redis.call('del', KEYS[1])
-            end
-            return 0
-            """, Long.class);
+    private static final RedisScript<Long> RELEASE_LOCK_SCRIPT = script("redis/lock-release-request.lua");
 
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;

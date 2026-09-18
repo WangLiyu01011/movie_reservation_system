@@ -1,208 +1,163 @@
 package me.wly.movie_reservation.order;
 
-import jakarta.persistence.EntityManager;
 import me.wly.movie_reservation.common.exception.BusinessException;
+import me.wly.movie_reservation.common.exception.RateLimitException;
+import me.wly.movie_reservation.common.exception.ResultCode;
 import me.wly.movie_reservation.order.dto.OrderCreateDTO;
-import me.wly.movie_reservation.order.model.Order;
 import me.wly.movie_reservation.order.model.OrderStatus;
 import me.wly.movie_reservation.order.vo.OrderCreateVO;
-import me.wly.movie_reservation.showtime.ShowtimeRepository;
-import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
-import me.wly.movie_reservation.showtime.model.SeatStatus;
-import me.wly.movie_reservation.showtime.model.Showtime;
-import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
-import me.wly.movie_reservation.theater.model.Seat;
 import me.wly.movie_reservation.user.UserRepository;
 import me.wly.movie_reservation.user.model.User;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
-    @Mock
-    private ShowtimeSeatRepository showtimeSeatRepository;
-    @Mock
-    private OrderRepository orderRepository;
-    @Mock
-    private UserRepository userRepository;
-    @Mock
-    private OrderMapper orderMapper;
-    @Mock
-    private ShowtimeRepository showtimeRepository;
-    @Mock
-    private EntityManager entityManager;
-    @InjectMocks
-    private OrderService orderService;
+    @Mock private UserRepository userRepository;
+    @Mock private OrderCreationService orderCreationService;
+    @Mock private OrderCacheService orderCacheService;
+    @InjectMocks private OrderService orderService;
 
-    @Test
-    void createOrder_calculatesAmountCreatesOrderSeatsAndLocksShowtimeSeats() {
-        User user = user(10L, "customer");
-        Showtime showtime = showtime(20L, new BigDecimal("50.00"));
-        ShowtimeSeat a1 = showtimeSeat(101L, showtime, 1L, SeatStatus.AVAILABLE);
-        ShowtimeSeat a2 = showtimeSeat(102L, showtime, 2L, SeatStatus.AVAILABLE);
-        OrderCreateDTO dto = new OrderCreateDTO(20L, List.of(1L, 2L), "order-request-1");
-        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(5);
-        OrderCreateVO expectedVO = new OrderCreateVO(
-                "odr_test", OrderStatus.PENDING_PAYMENT, new BigDecimal("100.00"), expiresAt,
-                "测试电影", "测试影院", "一号厅", showtime.getStartTime(), showtime.getEndTime(), List.of()
-        );
+    private User user;
+    private final OrderCreateDTO dto = new OrderCreateDTO(20L, List.of(1L), "request-1");
+    private final OrderCreateVO result = new OrderCreateVO("odr_test", OrderStatus.PENDING_PAYMENT,
+            BigDecimal.TEN, null, null, null, null, null, null, List.of());
 
+    @BeforeEach
+    void setUp() {
+        user = new User();
+        user.setId(10L);
+    }
+
+    private OrderCacheService.RequestPermit prepare(OrderCacheService.RequestState state) {
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
-        when(orderRepository.findByUser_IdAndRequestId(10L, "order-request-1")).thenReturn(Optional.empty());
-        when(showtimeRepository.findById(20L)).thenReturn(Optional.of(showtime));
-        when(showtimeSeatRepository.findAllForUpdate(20L, List.of(1L, 2L))).thenReturn(List.of(a1, a2));
-        when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(invocation -> {
-            Order order = invocation.getArgument(0);
-            order.setId(500L);
-            order.setCode("odr_test");
-            order.setStatus(OrderStatus.PENDING_PAYMENT);
-            return order;
-        });
-        doAnswer(invocation -> {
-            Order order = invocation.getArgument(0);
-            order.setExpiresAt(expiresAt);
-            return null;
-        }).when(entityManager).refresh(any(Order.class));
-        when(orderMapper.toCreateVO(any(Order.class))).thenReturn(expectedVO);
-
-        OrderCreateVO result = orderService.createOrder(dto, "customer");
-
-        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
-        verify(orderRepository).saveAndFlush(orderCaptor.capture());
-        Order savedOrder = orderCaptor.getValue();
-        assertEquals(new BigDecimal("100.00"), savedOrder.getTotalPrice());
-        assertEquals(2, savedOrder.getOrderSeats().size());
-        assertSame(savedOrder, savedOrder.getOrderSeats().getFirst().getOrder());
-        assertEquals(new BigDecimal("50.00"), savedOrder.getOrderSeats().getFirst().getTicketPrice());
-        verify(entityManager).refresh(savedOrder);
-        assertLockedByOrder(a1, savedOrder, "order-request-1", expiresAt);
-        assertLockedByOrder(a2, savedOrder, "order-request-1", expiresAt);
-        assertSame(expectedVO, result);
+        when(orderCreationService.findExisting(dto, 10L)).thenReturn(Optional.empty());
+        var permit = new OrderCacheService.RequestPermit("order:idem:{10}:request-1", "token", state);
+        when(orderCacheService.acquireRequest(10L, "request-1")).thenReturn(permit);
+        return permit;
     }
 
     @Test
-    void createOrder_returnsExistingOrderForSameRequestId() {
-        User user = user(10L, "customer");
-        Order existingOrder = order(500L, "odr_existing", user, OrderStatus.PENDING_PAYMENT,
-                LocalDateTime.now().plusMinutes(5));
-        OrderCreateVO expectedVO = new OrderCreateVO(
-                existingOrder.getCode(), existingOrder.getStatus(), BigDecimal.TEN, existingOrder.getExpiresAt(),
-                null, null, null, null, null, List.of()
-        );
+    void createOrder_returnsCommittedOrderWithoutRedisOrRateLimit() {
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
-        when(orderRepository.findByUser_IdAndRequestId(10L, "same-request")).thenReturn(Optional.of(existingOrder));
-        when(orderMapper.toCreateVO(existingOrder)).thenReturn(expectedVO);
+        when(orderCreationService.findExisting(dto, 10L)).thenReturn(Optional.of(result));
 
-        OrderCreateVO result = orderService.createOrder(
-                new OrderCreateDTO(20L, List.of(1L), "same-request"), "customer"
-        );
-
-        assertSame(expectedVO, result);
-        verifyNoInteractions(showtimeRepository, showtimeSeatRepository);
-        verify(orderRepository, never()).saveAndFlush(any());
+        assertSame(result, orderService.createOrder(dto, "customer"));
+        verifyNoInteractions(orderCacheService);
+        verify(orderCreationService, never()).createOrder(any(), any());
     }
 
     @Test
-    void createOrder_rejectsDuplicateSeatIdsBeforeLockingSeats() {
-        User user = user(10L, "customer");
-        Showtime showtime = showtime(20L, new BigDecimal("50.00"));
-        when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
-        when(orderRepository.findByUser_IdAndRequestId(10L, "request-1")).thenReturn(Optional.empty());
-        when(showtimeRepository.findById(20L)).thenReturn(Optional.of(showtime));
+    void createOrder_checksRateThenCreatesAndReleasesPermit() {
+        var permit = prepare(OrderCacheService.RequestState.ACQUIRED);
+        when(orderCreationService.createOrder(dto, user)).thenReturn(result);
 
+        assertSame(result, orderService.createOrder(dto, "customer"));
+
+        var sequence = inOrder(orderCacheService, orderCreationService);
+        sequence.verify(orderCreationService).findExisting(dto, 10L);
+        sequence.verify(orderCacheService).acquireRequest(10L, "request-1");
+        sequence.verify(orderCreationService).findExisting(dto, 10L);
+        sequence.verify(orderCacheService).checkRateLimit(10L);
+        sequence.verify(orderCreationService).createOrder(dto, user);
+        sequence.verify(orderCacheService).releaseRequest(permit);
+        verify(userRepository).findByUsername("customer");
+    }
+
+    @Test
+    void createOrder_rejectsInFlightDuplicateWithoutRateLimit() {
+        var permit = prepare(OrderCacheService.RequestState.BUSY);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> orderService.createOrder(dto, "customer"));
+
+        assertEquals(ResultCode.REQUEST_IN_PROGRESS, exception.resultCode);
+        verify(orderCacheService, never()).checkRateLimit(any());
+        verify(orderCreationService, never()).createOrder(any(), any());
+        verify(orderCacheService).releaseRequest(permit);
+    }
+
+    @Test
+    void createOrder_replaysOrderThatCommitsWhileAcquiringPermit() {
+        var permit = prepare(OrderCacheService.RequestState.BUSY);
+        when(orderCreationService.findExisting(dto, 10L))
+                .thenReturn(Optional.empty(), Optional.of(result));
+
+        assertSame(result, orderService.createOrder(dto, "customer"));
+        verify(orderCacheService, never()).checkRateLimit(any());
+        verify(orderCreationService, never()).createOrder(any(), any());
+        verify(orderCacheService).releaseRequest(permit);
+    }
+
+    @Test
+    void createOrder_releasesPermitWhenRateLimited() {
+        var permit = prepare(OrderCacheService.RequestState.ACQUIRED);
+        doThrow(new RateLimitException(1500)).when(orderCacheService).checkRateLimit(10L);
+
+        assertThrows(RateLimitException.class, () -> orderService.createOrder(dto, "customer"));
+        verify(orderCreationService, never()).createOrder(any(), any());
+        verify(orderCacheService).releaseRequest(permit);
+    }
+
+    @Test
+    void createOrder_releasesPermitAfterCreationFailure() {
+        var permit = prepare(OrderCacheService.RequestState.ACQUIRED);
+        BusinessException failure = new BusinessException(ResultCode.BAD_REQUEST, "Seat unavailable");
+        when(orderCreationService.createOrder(dto, user)).thenThrow(failure);
+
+        assertSame(failure, assertThrows(BusinessException.class,
+                () -> orderService.createOrder(dto, "customer")));
+        verify(orderCacheService).releaseRequest(permit);
+    }
+
+    @Test
+    void createOrder_usesDatabaseCreationWhenRedisIsUnavailable() {
+        prepare(OrderCacheService.RequestState.REDIS_UNAVAILABLE);
+        when(orderCreationService.createOrder(dto, user)).thenReturn(result);
+
+        assertSame(result, orderService.createOrder(dto, "customer"));
+        verify(orderCreationService).createOrder(dto, user);
+    }
+
+    @Test
+    void createOrder_replaysConcurrentDatabaseWinnerAfterUniqueConflict() {
+        var permit = prepare(OrderCacheService.RequestState.REDIS_UNAVAILABLE);
+        when(orderCreationService.findExisting(dto, 10L))
+                .thenReturn(Optional.empty(), Optional.empty(), Optional.of(result));
+        when(orderCreationService.createOrder(dto, user))
+                .thenThrow(new DataIntegrityViolationException("Duplicate user/request"));
+
+        assertSame(result, orderService.createOrder(dto, "customer"));
+        verify(orderCacheService).releaseRequest(permit);
+    }
+
+    @Test
+    void createOrder_rethrowsUnrelatedDatabaseConstraintFailure() {
+        var permit = prepare(OrderCacheService.RequestState.ACQUIRED);
+        var failure = new DataIntegrityViolationException("Other constraint");
+        when(orderCreationService.createOrder(dto, user)).thenThrow(failure);
+
+        assertSame(failure, assertThrows(DataIntegrityViolationException.class,
+                () -> orderService.createOrder(dto, "customer")));
+        verify(orderCacheService).releaseRequest(permit);
+    }
+
+    @Test
+    void createOrder_rejectsDuplicateSeatsBeforeRedis() {
         assertThrows(BusinessException.class, () -> orderService.createOrder(
-                new OrderCreateDTO(20L, List.of(1L, 1L), "request-1"), "customer"
-        ));
-
-        verifyNoInteractions(showtimeSeatRepository);
-        verify(orderRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void createOrder_rejectsUnavailableSeat() {
-        User user = user(10L, "customer");
-        Showtime showtime = showtime(20L, new BigDecimal("50.00"));
-        ShowtimeSeat unavailable = showtimeSeat(101L, showtime, 1L, SeatStatus.LOCKED);
-        when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
-        when(orderRepository.findByUser_IdAndRequestId(10L, "request-1")).thenReturn(Optional.empty());
-        when(showtimeRepository.findById(20L)).thenReturn(Optional.of(showtime));
-        when(showtimeSeatRepository.findAllForUpdate(20L, List.of(1L))).thenReturn(List.of(unavailable));
-
-        assertThrows(BusinessException.class, () -> orderService.createOrder(
-                new OrderCreateDTO(20L, List.of(1L), "request-1"), "customer"
-        ));
-
-        verify(orderRepository, never()).saveAndFlush(any());
-    }
-
-    private User user(Long id, String username) {
-        User user = new User();
-        user.setId(id);
-        user.setUsername(username);
-        return user;
-    }
-
-    private Showtime showtime(Long id, BigDecimal price) {
-        Showtime showtime = new Showtime();
-        showtime.setId(id);
-        showtime.setPrice(price);
-        showtime.setMovieTitle("测试电影");
-        showtime.setTheaterName("测试影院");
-        showtime.setHallName("一号厅");
-        showtime.setStartTime(LocalDateTime.now().plusHours(2));
-        showtime.setEndTime(LocalDateTime.now().plusHours(4));
-        return showtime;
-    }
-
-    private ShowtimeSeat showtimeSeat(Long id, Showtime showtime, Long seatId, SeatStatus status) {
-        Seat seat = new Seat();
-        seat.setId(seatId);
-        ShowtimeSeat showtimeSeat = new ShowtimeSeat();
-        showtimeSeat.setId(id);
-        showtimeSeat.setShowtime(showtime);
-        showtimeSeat.setSeat(seat);
-        showtimeSeat.setStatus(status);
-        return showtimeSeat;
-    }
-
-    private Order order(Long id, String code, User user, OrderStatus status, LocalDateTime expiresAt) {
-        Order order = new Order();
-        order.setId(id);
-        order.setCode(code);
-        order.setUser(user);
-        order.setStatus(status);
-        order.setExpiresAt(expiresAt);
-        return order;
-    }
-
-    private void assertLockedByOrder(
-            ShowtimeSeat seat,
-            Order order,
-            String lockToken,
-            LocalDateTime lockUntil
-    ) {
-        assertEquals(SeatStatus.LOCKED, seat.getStatus());
-        assertSame(order, seat.getOrder());
-        assertEquals(lockToken, seat.getLockToken());
-        assertEquals(lockUntil, seat.getLockUntil());
+                new OrderCreateDTO(20L, List.of(1L, 1L), "request-1"), "customer"));
+        verifyNoInteractions(userRepository, orderCreationService, orderCacheService);
     }
 }
