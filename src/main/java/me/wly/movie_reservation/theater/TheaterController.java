@@ -25,11 +25,6 @@ public class TheaterController {
         return new ResponseEntity<>(ApiResponse.success(theater), HttpStatus.CREATED);
     }
 
-//    @GetMapping("/{cityId}")
-//    public ResponseEntity<ApiResponse<List<TheaterCardVO>>> getTheatersInCity(@PathVariable Integer cityId) {
-//        List<TheaterCardVO> theaterCards = theaterService.getTheatersInCity(cityId);
-//        return new ResponseEntity<ApiResponse<List<TheaterCardVO>>>(ApiResponse.success(theaterCards), HttpStatus.OK);
-//    }
 
     @GetMapping()
     public ResponseEntity<ApiResponse<List<TheaterVO>>> getTheatersInDistinct(@RequestParam(required = false) Integer cityId, @RequestParam(required = false) Integer districtId) {

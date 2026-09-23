@@ -35,7 +35,7 @@ public class OrderService {
 
     /**
      创建订单流程：
-        1.获取用户id查询数据库是否已有订单
+        1.查询数据库是否已有同用户同RequestId订单
         2.尝试创建redis锁
         3.查询用户限流情况
         4.确认订单创建成功释放redis锁

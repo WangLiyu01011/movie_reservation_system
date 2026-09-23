@@ -46,14 +46,23 @@ public class MovieService {
         return movie;
     }
 
-    public List<Movie> getUpcomingMovies(){
+    public List<MovieVO> getUpcomingMovies(){
         LocalDateTime now = LocalDateTime.now();
-        return movieRepository.findMoviesByReleaseDateGreaterThan(now);
+
+        List<Movie> movies = movieRepository.findMoviesByReleaseDateGreaterThan(now);
+        return movies.stream().map(entity -> new MovieVO(entity.getTitle(), entity.getReleaseDate(), entity.getPosterImageURL()))
+                .toList();
     }
 
-    public List<Movie> getShowingMovies(){
+    public List<MovieVO> getShowingMovies(){
         LocalDateTime now = LocalDateTime.now();
-        return movieRepository.findOnShowingMovies(now);
+        List<Movie> movies = movieRepository.findOnShowingMovies(now);
+        return movies.stream().map(entity -> new MovieVO(entity.getTitle(), entity.getReleaseDate(), entity.getPosterImageURL()))
+                .toList();
+    }
+
+    public List<Movie> getShowingMoviesForAi(LocalDateTime time) {
+        return movieRepository.findOnShowingMovies(time);
     }
 
     private BusinessException movieNotFound(String imdbId) {

@@ -35,7 +35,6 @@ public class OrderExpirationScheduler {
             try {
                 orderExpirationService.expireOne(orderId, now);
             } catch (RuntimeException exception) {
-                // A locked or malformed row is retried during the next scan; the remaining orders still proceed.
                 log.error("Failed to expire order id={}", orderId, exception);
             }
         }

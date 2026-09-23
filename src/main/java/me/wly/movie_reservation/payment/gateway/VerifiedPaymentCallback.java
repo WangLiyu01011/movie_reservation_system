@@ -5,7 +5,7 @@ import me.wly.movie_reservation.payment.model.PaymentCallbackStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/** Callback data that has already passed provider signature verification. */
+/** 经过提供商signature确认后的callback data */
 public record VerifiedPaymentCallback(
         String eventId,
         String channel,

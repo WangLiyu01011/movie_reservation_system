@@ -29,12 +29,12 @@ public class JwtUtil {
     }
 
     public record TokenResult(String token, Long expireTime){}
-    public TokenResult generateToken(String userCode) {
+    public TokenResult generateToken(String username) {
         Date now = new Date();
         Date expireDate = new Date(now.getTime() + expirationMs);
 
         String token = Jwts.builder()
-                .subject(userCode)
+                .subject(username)
                 .issuedAt(now)
                 .expiration(expireDate)
                 .signWith(key)
@@ -42,10 +42,11 @@ public class JwtUtil {
         return new TokenResult(token, expireDate.getTime());
     }
 
-    public String extractUserCode(String token) {
+    public String extractUsername(String token) {
         return parseClaims(token).getSubject();
     }
 
+    // 判断token合法性
     public boolean isTokenValid(String token) {
         if (token == null || token.isBlank()) {
             return false;
@@ -58,6 +59,7 @@ public class JwtUtil {
         }
     }
 
+    //
     private Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(key)

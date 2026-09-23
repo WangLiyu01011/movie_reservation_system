@@ -54,6 +54,8 @@ public class SecurityConfig {
                         .hasAnyRole("SYSTEM_ADMIN", "THEATER_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/halls/*")
                         .hasAnyRole("SYSTEM_ADMIN", "THEATER_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/showtimes")
+                        .hasAnyRole( "THEATER_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)

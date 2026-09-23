@@ -21,8 +21,8 @@ public class OrderSeat {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
-    @OneToOne
-    @JoinColumn(name = "showtime_seat_id", nullable = false, unique = true)
+    @ManyToOne
+    @JoinColumn(name = "showtime_seat_id", nullable = false)
     private ShowtimeSeat showtimeSeat;
     @Column(precision = 10, scale = 2, nullable = false)
     private BigDecimal ticketPrice;

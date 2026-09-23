@@ -7,6 +7,8 @@ import me.wly.movie_reservation.showtime.dto.ShowtimeCreateDTO;
 import me.wly.movie_reservation.showtime.dto.ShowtimeDTO;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,7 +25,8 @@ public class ShowtimeController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<ShowtimeDTO>> createShowtime(@Valid @RequestBody ShowtimeCreateDTO newShowtime) {
-        return new ResponseEntity<ApiResponse<ShowtimeDTO>>(ApiResponse.success(showtimeService.createShowtime(newShowtime)), HttpStatus.CREATED);
+    public ResponseEntity<ApiResponse<ShowtimeDTO>> createShowtime(@Valid @RequestBody ShowtimeCreateDTO newShowtime, @AuthenticationPrincipal UserDetails userDetails) {
+        ShowtimeDTO showtimeDTO = showtimeService.createShowtime(newShowtime, userDetails.getUsername());
+        return new ResponseEntity<ApiResponse<ShowtimeDTO>>(ApiResponse.success(showtimeDTO), HttpStatus.CREATED);
     }
 }

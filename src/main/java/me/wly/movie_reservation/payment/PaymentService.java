@@ -20,6 +20,7 @@ import me.wly.movie_reservation.user.model.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -40,6 +41,8 @@ public class PaymentService {
     public PaymentRequestVO createPayment(PaymentRequestDTO dto, String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND, "User not found"));
+
+        // 获取对应订单并上锁
         Order order = orderRepository.findByCodeAndUserIdForUpdate(dto.orderCode(), user.getId())
                 .orElseThrow(() -> new BusinessException(ResultCode.ORDER_NOT_FOUND, "Order not found"));
 
@@ -53,8 +56,13 @@ public class PaymentService {
                     "Order cannot be paid in status: " + order.getStatus()
             );
         }
-        if (order.getTotalPrice() == null || order.getTotalPrice().signum() < 0) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "Order amount is invalid");
+
+        if (order.getTotalPrice() == null
+                || order.getTotalPrice().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(
+                    ResultCode.BAD_REQUEST,
+                    "Order price cannot be negative or null"
+            );
         }
 
         PaymentTransaction sameRequest = paymentTransactionRepository

@@ -153,7 +153,7 @@ public class PaymentCallbackService {
         }
 
         LocalDateTime deadline = earlier(order.getExpiresAt(), payment.getExpiresAt());
-        return deadline != null && !paidAt.isAfter(deadline);
+        return deadline != null && !paidAt.isAfter(deadline); // 订单、Payment状态不作为支付成功依据而是精确的过期时间
     }
 
     private void markRefundRequired(
@@ -201,6 +201,7 @@ public class PaymentCallbackService {
         }
     }
 
+    // 确认是重复的回调事件，eventId复用或者已被拒绝的回调
     private void acknowledgeDuplicate(
             PaymentCallbackEvent event,
             VerifiedPaymentCallback callback

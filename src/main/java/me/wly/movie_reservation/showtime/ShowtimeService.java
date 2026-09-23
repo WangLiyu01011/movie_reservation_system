@@ -12,26 +12,29 @@ import me.wly.movie_reservation.showtime.model.Showtime;
 import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
 import me.wly.movie_reservation.theater.HallRepository;
 import me.wly.movie_reservation.theater.SeatRepository;
+import me.wly.movie_reservation.theater.TheaterAdminRepository;
 import me.wly.movie_reservation.theater.TheaterRepository;
-import me.wly.movie_reservation.theater.model.Hall;
-import me.wly.movie_reservation.theater.model.Seat;
-import me.wly.movie_reservation.theater.model.SeatType;
-import me.wly.movie_reservation.theater.model.Theater;
+import me.wly.movie_reservation.theater.model.*;
+import me.wly.movie_reservation.user.UserRepository;
+import me.wly.movie_reservation.user.model.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class ShowtimeService {
     private final ShowtimeRepository showtimeRepository;
     private final TheaterRepository theaterRepository;
+    private final TheaterAdminRepository theaterAdminRepository;
     private final HallRepository hallRepository;
     private final MovieRepository movieRepository;
     private final SeatRepository seatRepository;
     private final ShowtimeSeatRepository showtimeSeatRepository;
     private final ShowtimeMapper showtimeMapper;
+    private final UserRepository userRepository;
 
     public List<ShowtimeDTO> getShowtimeList(Integer theaterId, String movieImdbId){
         if(movieImdbId == null) {
@@ -43,7 +46,14 @@ public class ShowtimeService {
     }
 
     @Transactional
-    public ShowtimeDTO createShowtime(ShowtimeCreateDTO newShowtime) {
+    public ShowtimeDTO createShowtime(ShowtimeCreateDTO newShowtime, String username) {
+        User creator = userRepository.findByUsername(username)
+                .orElseThrow(()->new BusinessException(ResultCode.USER_NOT_FOUND, "Current user not found"));
+        if(!theaterAdminRepository.existsByUser_IdAndTheater_Id(creator.getId(), newShowtime.theaterId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "No permission to manage target theater");
+        };
+
+
         if (!newShowtime.endTime().isAfter(newShowtime.startTime())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Showtime end time must be after start time");
         }

@@ -10,11 +10,14 @@ import me.wly.movie_reservation.showtime.model.Showtime;
 import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
 import me.wly.movie_reservation.theater.HallRepository;
 import me.wly.movie_reservation.theater.SeatRepository;
+import me.wly.movie_reservation.theater.TheaterAdminRepository;
 import me.wly.movie_reservation.theater.TheaterRepository;
 import me.wly.movie_reservation.theater.model.Hall;
 import me.wly.movie_reservation.theater.model.Seat;
 import me.wly.movie_reservation.theater.model.SeatType;
 import me.wly.movie_reservation.theater.model.Theater;
+import me.wly.movie_reservation.user.UserRepository;
+import me.wly.movie_reservation.user.model.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,10 +41,14 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ShowtimeServiceTest {
+    private static final String ADMIN_USERNAME = "manager";
+
     @Mock
     private ShowtimeRepository showtimeRepository;
     @Mock
     private TheaterRepository theaterRepository;
+    @Mock
+    private TheaterAdminRepository theaterAdminRepository;
     @Mock
     private HallRepository hallRepository;
     @Mock
@@ -52,6 +59,8 @@ class ShowtimeServiceTest {
     private ShowtimeSeatRepository showtimeSeatRepository;
     @Mock
     private ShowtimeMapper showtimeMapper;
+    @Mock
+    private UserRepository userRepository;
     @InjectMocks
     private ShowtimeService showtimeService;
 
@@ -61,6 +70,7 @@ class ShowtimeServiceTest {
         Hall hall = hall(2, "IMAX 厅", theater);
         Movie movie = movie(3, "tt001", "测试电影");
         ShowtimeCreateDTO dto = validDto();
+        authorizeAdminForTheater(1);
         when(theaterRepository.findById(1)).thenReturn(Optional.of(theater));
         when(hallRepository.findById(2)).thenReturn(Optional.of(hall));
         when(showtimeRepository.existsByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
@@ -82,7 +92,7 @@ class ShowtimeServiceTest {
                     showtime.getTheaterName(), showtime.getHallName(), showtime.getMovieTitle(), showtime.getPrice());
         });
 
-        ShowtimeDTO result = showtimeService.createShowtime(dto);
+        ShowtimeDTO result = showtimeService.createShowtime(dto, ADMIN_USERNAME);
 
         ArgumentCaptor<List<ShowtimeSeat>> seatsCaptor = listCaptor();
         verify(showtimeSeatRepository).saveAll(seatsCaptor.capture());
@@ -97,13 +107,15 @@ class ShowtimeServiceTest {
     }
 
     @Test
-    void createShowtime_rejectsEndTimeBeforeStartTimeWithoutAccessingRepositories() {
+    void createShowtime_rejectsEndTimeBeforeStartTimeWithoutAccessingShowtimeRepositories() {
         LocalDateTime start = LocalDateTime.of(2030, 1, 1, 12, 0);
         ShowtimeCreateDTO invalidTime = new ShowtimeCreateDTO(
                 start, start.minusMinutes(1), 1, 2, "tt001", new BigDecimal("50.00")
         );
+        authorizeAdminForTheater(1);
 
-        assertThrows(BusinessException.class, () -> showtimeService.createShowtime(invalidTime));
+        assertThrows(BusinessException.class,
+                () -> showtimeService.createShowtime(invalidTime, ADMIN_USERNAME));
 
         verifyNoInteractions(showtimeRepository, theaterRepository, hallRepository, movieRepository,
                 seatRepository, showtimeSeatRepository, showtimeMapper);
@@ -113,10 +125,12 @@ class ShowtimeServiceTest {
     void createShowtime_rejectsHallFromAnotherTheater() {
         Theater requestedTheater = theater(1, "西湖影城");
         Hall otherTheaterHall = hall(2, "二号厅", theater(9, "滨江影城"));
+        authorizeAdminForTheater(1);
         when(theaterRepository.findById(1)).thenReturn(Optional.of(requestedTheater));
         when(hallRepository.findById(2)).thenReturn(Optional.of(otherTheaterHall));
 
-        assertThrows(BusinessException.class, () -> showtimeService.createShowtime(validDto()));
+        assertThrows(BusinessException.class,
+                () -> showtimeService.createShowtime(validDto(), ADMIN_USERNAME));
 
         verify(showtimeRepository, never()).save(any());
         verify(showtimeSeatRepository, never()).saveAll(anyList());
@@ -127,16 +141,31 @@ class ShowtimeServiceTest {
         Theater theater = theater(1, "西湖影城");
         Hall hall = hall(2, "IMAX 厅", theater);
         ShowtimeCreateDTO dto = validDto();
+        authorizeAdminForTheater(1);
         when(theaterRepository.findById(1)).thenReturn(Optional.of(theater));
         when(hallRepository.findById(2)).thenReturn(Optional.of(hall));
         when(showtimeRepository.existsByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
                 2, dto.endTime(), dto.startTime())).thenReturn(true);
 
-        assertThrows(BusinessException.class, () -> showtimeService.createShowtime(dto));
+        assertThrows(BusinessException.class,
+                () -> showtimeService.createShowtime(dto, ADMIN_USERNAME));
 
         verify(movieRepository, never()).findMovieByImdbId(any());
         verify(seatRepository, never()).findAllByHall_IdOrderByXAscYAsc(any());
         verify(showtimeRepository, never()).save(any());
+    }
+
+    @Test
+    void createShowtime_rejectsAdminOfAnotherTheaterBeforeAccessingShowtimeRepositories() {
+        User admin = user(10L, ADMIN_USERNAME);
+        when(userRepository.findByUsername(ADMIN_USERNAME)).thenReturn(Optional.of(admin));
+        when(theaterAdminRepository.existsByUser_IdAndTheater_Id(admin.getId(), 1)).thenReturn(false);
+
+        assertThrows(BusinessException.class,
+                () -> showtimeService.createShowtime(validDto(), ADMIN_USERNAME));
+
+        verifyNoInteractions(showtimeRepository, theaterRepository, hallRepository, movieRepository,
+                seatRepository, showtimeSeatRepository, showtimeMapper);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -150,6 +179,19 @@ class ShowtimeServiceTest {
                 LocalDateTime.of(2030, 1, 1, 14, 0),
                 1, 2, "tt001", new BigDecimal("50.00")
         );
+    }
+
+    private void authorizeAdminForTheater(int theaterId) {
+        User admin = user(10L, ADMIN_USERNAME);
+        when(userRepository.findByUsername(ADMIN_USERNAME)).thenReturn(Optional.of(admin));
+        when(theaterAdminRepository.existsByUser_IdAndTheater_Id(admin.getId(), theaterId)).thenReturn(true);
+    }
+
+    private User user(long id, String username) {
+        User user = new User();
+        user.setId(id);
+        user.setUsername(username);
+        return user;
     }
 
     private Theater theater(int id, String name) {

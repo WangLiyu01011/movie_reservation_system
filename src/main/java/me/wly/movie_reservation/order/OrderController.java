@@ -22,7 +22,7 @@ public class OrderController {
 
     @GetMapping()
     public ResponseEntity<ApiResponse<List<OrderVO>>> getOrders(@AuthenticationPrincipal UserDetails userDetails) {
-        return new ResponseEntity<ApiResponse<List<OrderVO>>>(ApiResponse.success(orderService.getOrderByUsername(userDetails.getUsername())), HttpStatus.OK);
+        return new ResponseEntity<>(ApiResponse.success(orderService.getOrderByUsername(userDetails.getUsername())), HttpStatus.OK);
     }
 
 

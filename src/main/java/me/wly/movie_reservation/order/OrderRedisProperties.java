@@ -22,6 +22,8 @@ public class OrderRedisProperties {
     private Duration requestLockTtl = Duration.ofSeconds(60);
     @NotNull
     private Duration rateLimitWindow = Duration.ofSeconds(10);
+    @NotNull
+    private Duration expireScanDelay = Duration.ofSeconds(1);
     @Min(1)
     private int rateLimitMaxRequests = 3;
 

@@ -26,7 +26,7 @@ public class OrderExpirationService {
     private final ShowtimeSeatRepository showtimeSeatRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
 
-    /** Processes one candidate in its own transaction so one failure cannot roll back the whole batch. */
+    /** 创建独立的新事务处理单个对象，确保不会导致一整个批次回滚 */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean expireOne(Long orderId, LocalDateTime now) {
         return orderRepository.findByIdForUpdate(orderId)
@@ -35,8 +35,7 @@ public class OrderExpirationService {
     }
 
     /**
-     * Expires an order that is already protected by an order-row write lock.
-     * This method is also used by the payment API, which already holds that lock.
+     * 将已经获取订单锁的order进行过期
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean expireLockedOrder(Order order, LocalDateTime now) {

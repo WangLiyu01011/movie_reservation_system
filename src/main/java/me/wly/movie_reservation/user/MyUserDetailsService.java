@@ -2,6 +2,7 @@ package me.wly.movie_reservation.user;
 
 import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.user.model.User;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -15,6 +16,7 @@ import java.util.Collections;
 public class MyUserDetailsService implements UserDetailsService {
     private final UserRepository userRepository;
     @Override
+    @NullMarked
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));

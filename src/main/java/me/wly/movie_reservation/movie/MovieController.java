@@ -24,23 +24,23 @@ public class MovieController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<MovieVO>>> getMovies(@RequestParam(required = false) String genre){
         List<MovieVO> movies = movieService.getMovies(genre);
-        return new ResponseEntity<ApiResponse<List<MovieVO>>>(ApiResponse.success(movies), HttpStatus.OK);
+        return new ResponseEntity<>(ApiResponse.success(movies), HttpStatus.OK);
     }
 
     @GetMapping("/{imdbId}")
     public ResponseEntity<ApiResponse<MovieDetailVO>> getSingleMovie(@PathVariable String imdbId){
 
-        return new ResponseEntity<ApiResponse<MovieDetailVO>> (ApiResponse.success(movieService.singleMovie(imdbId)), HttpStatus.OK);
+        return new ResponseEntity<> (ApiResponse.success(movieService.singleMovie(imdbId)), HttpStatus.OK);
     }
 
 
     @GetMapping("/showing")
-    public ResponseEntity<List<Movie>> getShowingMoviesList() {
-        return new ResponseEntity<List<Movie>> (movieService.getShowingMovies(), HttpStatus.OK);
+    public ResponseEntity<List<MovieVO>> getShowingMoviesList() {
+        return new ResponseEntity<> (movieService.getShowingMovies(), HttpStatus.OK);
     }
 
     @GetMapping("/upcoming")
-    public ResponseEntity<List<Movie>> getUpcomingMoviesList() {
-        return new ResponseEntity<List<Movie>> (movieService.getUpcomingMovies(), HttpStatus.OK);
+    public ResponseEntity<List<MovieVO>> getUpcomingMoviesList() {
+        return new ResponseEntity<>(movieService.getUpcomingMovies(), HttpStatus.OK);
     }
 }
