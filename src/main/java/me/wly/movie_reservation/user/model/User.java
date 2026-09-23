@@ -14,18 +14,33 @@ import java.util.*;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "users")
+@Table(
+        name = "users",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_user_code", columnNames = "code"),
+                @UniqueConstraint(name = "uk_user_username", columnNames = "username"),
+                @UniqueConstraint(name = "uk_user_email_address", columnNames = "email_address"),
+                @UniqueConstraint(name = "uk_user_phone_number", columnNames = "phone_number")
+        }
+)
 public class User {
     @Id
     @GeneratedValue (strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(length = 80, nullable = false)
     private String code;
+    @Column(length = 32, nullable = false, columnDefinition = "char(32)")
     private String username;
+    @Column(length = 48, nullable = false)
     private String nickname;
+    @Column(name = "email_address", length = 60)
     private String emailAddress;
+    @Column(name = "phone_number", length = 20)
     private String phoneNumber;
+    @Column(length = 80, nullable = false)
     private String password;
     @Enumerated(EnumType.STRING)
+    @Column(name = "user_role", length = 32, nullable = false)
     private UserRole userRole;
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<TheaterAdmin> theaterAdmins = new HashSet<>();

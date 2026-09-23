@@ -30,6 +30,15 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Table(
+        name = "payment_transaction",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_payment_transaction_no", columnNames = "payment_no"),
+                @UniqueConstraint(name = "uk_payment_transaction_order_request", columnNames = {"order_id", "request_id"}),
+                @UniqueConstraint(name = "uk_payment_transaction_provider_trade", columnNames = "provider_trade_no")
+        },
+        indexes = @Index(name = "idx_payment_transaction_order_status_id", columnList = "order_id,status,id")
+)
 public class PaymentTransaction {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -78,7 +87,7 @@ public class PaymentTransaction {
     @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
 
-    @Column(name = "expires_at", insertable = false)
+    @Column(name = "expires_at", nullable = false, insertable = false, updatable = false)
     private LocalDateTime expiresAt;
 
     /** Provider-issued checkout URL. Do not write its tokenized value to application logs. */

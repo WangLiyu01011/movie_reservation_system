@@ -25,25 +25,32 @@ import java.util.List;
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_orders_user_request",
                 columnNames = {"user_id", "request_id"}
-        )
+        ),
+        indexes = @Index(name = "idx_orders_status_expires_at", columnList = "status,expires_at")
 )
 public class Order {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(length = 80, nullable = false, unique = true)
     private String code;
-    @Column(name = "request_id", nullable = false)
+    @Column(name = "request_id", nullable = false, length = 128)
     private String requestId;
     @ManyToOne
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
+    @Column(name = "movie_title", length = 80)
     private String movieTitle;
+    @Column(name = "theater_name", length = 80)
     private String theaterName;
+    @Column(name = "hall_name", length = 40)
     private String hallName;
     @ManyToOne
-    @JoinColumn(name = "showtime_id")
+    @JoinColumn(name = "showtime_id", nullable = false)
     private Showtime showtime;
+    @Column(nullable = false)
     private LocalDateTime startTime;
+    @Column(nullable = false)
     private LocalDateTime endTime;
     @OneToMany(
             mappedBy = "order",
@@ -55,15 +62,18 @@ public class Order {
         orderSeats.add(orderSeat);
         orderSeat.setOrder(this);
     }
-    @Column(precision = 10, scale = 2)
+    @Column(precision = 10, scale = 2, nullable = false)
     private BigDecimal totalPrice;
     @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
     private OrderStatus status;
-    @Column(insertable = false, updatable = false)
+    @Column(name = "expires_at", nullable = false, insertable = false, updatable = false)
     private LocalDateTime expiresAt;
     private LocalDateTime paidAt;
     private LocalDateTime cancelledAt;
+    @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
+    @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
     @PrePersist
     public void prePersist(){

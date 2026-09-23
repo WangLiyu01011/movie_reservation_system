@@ -16,8 +16,11 @@ import lombok.Setter;
 public class Area {
     @Id
     private int id;
+    @Column(length = 32, nullable = false, columnDefinition = "char(32)")
     private String name;
+    @Column(name = "parent_id", nullable = false)
     private int parentId;
+    @Column(nullable = false)
     private short level; // 0 for province , 1 for cities, 2 for district or counties
 
 }
