@@ -4,6 +4,7 @@ import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.common.exception.RateLimitException;
 import me.wly.movie_reservation.common.exception.ResultCode;
 import me.wly.movie_reservation.order.dto.OrderCreateDTO;
+import me.wly.movie_reservation.order.model.Order;
 import me.wly.movie_reservation.order.model.OrderStatus;
 import me.wly.movie_reservation.order.vo.OrderCreateVO;
 import me.wly.movie_reservation.user.UserRepository;
@@ -17,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,17 +30,27 @@ class OrderServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private OrderCreationService orderCreationService;
     @Mock private OrderCacheService orderCacheService;
+    @Mock private OrderMapper orderMapper;
     @InjectMocks private OrderService orderService;
 
     private User user;
+    private Order createdOrder;
+    private OrderCreateVO result;
     private final OrderCreateDTO dto = new OrderCreateDTO(20L, List.of(1L), "request-1");
-    private final OrderCreateVO result = new OrderCreateVO("odr_test", OrderStatus.PENDING_PAYMENT,
-            BigDecimal.TEN, null, null, null, null, null, null, List.of());
 
     @BeforeEach
     void setUp() {
         user = new User();
         user.setId(10L);
+        createdOrder = new Order();
+        createdOrder.setId(500L);
+        createdOrder.setCode("odr_test");
+        createdOrder.setUser(user);
+        createdOrder.setStatus(OrderStatus.PENDING_PAYMENT);
+        createdOrder.setTotalPrice(BigDecimal.TEN);
+        createdOrder.setExpiresAt(LocalDateTime.of(2026, 9, 23, 21, 0));
+        result = new OrderCreateVO("odr_test", OrderStatus.PENDING_PAYMENT,
+                BigDecimal.TEN, createdOrder.getExpiresAt(), null, null, null, null, null, List.of());
     }
 
     private OrderCacheService.RequestPermit prepare(OrderCacheService.RequestState state) {
@@ -52,7 +64,8 @@ class OrderServiceTest {
     @Test
     void createOrder_returnsCommittedOrderWithoutRedisOrRateLimit() {
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
-        when(orderCreationService.findExisting(dto, 10L)).thenReturn(Optional.of(result));
+        when(orderCreationService.findExisting(dto, 10L)).thenReturn(Optional.of(createdOrder));
+        when(orderMapper.toCreateVO(createdOrder)).thenReturn(result);
 
         assertSame(result, orderService.createOrder(dto, "customer"));
         verifyNoInteractions(orderCacheService);
@@ -62,7 +75,8 @@ class OrderServiceTest {
     @Test
     void createOrder_checksRateThenCreatesAndReleasesPermit() {
         var permit = prepare(OrderCacheService.RequestState.ACQUIRED);
-        when(orderCreationService.createOrder(dto, user)).thenReturn(result);
+        when(orderCreationService.createOrder(dto, user)).thenReturn(createdOrder);
+        when(orderMapper.toCreateVO(createdOrder)).thenReturn(result);
 
         assertSame(result, orderService.createOrder(dto, "customer"));
 
@@ -72,6 +86,7 @@ class OrderServiceTest {
         sequence.verify(orderCreationService).findExisting(dto, 10L);
         sequence.verify(orderCacheService).checkRateLimit(10L);
         sequence.verify(orderCreationService).createOrder(dto, user);
+        sequence.verify(orderCacheService).addOrderToZSet(500L, createdOrder.getExpiresAt());
         sequence.verify(orderCacheService).releaseRequest(permit);
         verify(userRepository).findByUsername("customer");
     }
@@ -93,7 +108,8 @@ class OrderServiceTest {
     void createOrder_replaysOrderThatCommitsWhileAcquiringPermit() {
         var permit = prepare(OrderCacheService.RequestState.BUSY);
         when(orderCreationService.findExisting(dto, 10L))
-                .thenReturn(Optional.empty(), Optional.of(result));
+                .thenReturn(Optional.empty(), Optional.of(createdOrder));
+        when(orderMapper.toCreateVO(createdOrder)).thenReturn(result);
 
         assertSame(result, orderService.createOrder(dto, "customer"));
         verify(orderCacheService, never()).checkRateLimit(any());
@@ -125,21 +141,25 @@ class OrderServiceTest {
     @Test
     void createOrder_usesDatabaseCreationWhenRedisIsUnavailable() {
         prepare(OrderCacheService.RequestState.REDIS_UNAVAILABLE);
-        when(orderCreationService.createOrder(dto, user)).thenReturn(result);
+        when(orderCreationService.createOrder(dto, user)).thenReturn(createdOrder);
+        when(orderMapper.toCreateVO(createdOrder)).thenReturn(result);
 
         assertSame(result, orderService.createOrder(dto, "customer"));
         verify(orderCreationService).createOrder(dto, user);
+        verify(orderCacheService).addOrderToZSet(500L, createdOrder.getExpiresAt());
     }
 
     @Test
     void createOrder_replaysConcurrentDatabaseWinnerAfterUniqueConflict() {
         var permit = prepare(OrderCacheService.RequestState.REDIS_UNAVAILABLE);
         when(orderCreationService.findExisting(dto, 10L))
-                .thenReturn(Optional.empty(), Optional.empty(), Optional.of(result));
+                .thenReturn(Optional.empty(), Optional.empty(), Optional.of(createdOrder));
         when(orderCreationService.createOrder(dto, user))
                 .thenThrow(new DataIntegrityViolationException("Duplicate user/request"));
+        when(orderMapper.toCreateVO(createdOrder)).thenReturn(result);
 
         assertSame(result, orderService.createOrder(dto, "customer"));
+        verify(orderCacheService, never()).addOrderToZSet(any(), any());
         verify(orderCacheService).releaseRequest(permit);
     }
 

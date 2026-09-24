@@ -10,9 +10,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,6 +27,7 @@ import static org.mockito.Mockito.*;
 class OrderCacheServiceTest {
     @Mock private StringRedisTemplate redis;
     @Mock private ValueOperations<String, String> values;
+    @Mock private ZSetOperations<String, String> zSet;
     private OrderRedisProperties properties;
     private OrderCacheService service;
 
@@ -71,6 +76,7 @@ class OrderCacheServiceTest {
         assertEquals(OrderCacheService.RequestState.REDIS_UNAVAILABLE,
                 service.acquireRequest(10L, "request-1").state());
         assertDoesNotThrow(() -> service.checkRateLimit(10L));
+        assertDoesNotThrow(() -> service.addOrderToZSet(50L, LocalDateTime.now()));
         verifyNoInteractions(redis);
     }
 
@@ -130,5 +136,46 @@ class OrderCacheServiceTest {
                 .thenThrow(new RedisConnectionFailureException("Redis down"));
 
         assertDoesNotThrow(() -> service.releaseRequest(permit));
+    }
+
+    @Test
+    void addOrderToZSet_usesOrderIdAndShanghaiExpirationMillis() {
+        LocalDateTime expiresAt = LocalDateTime.of(2026, 9, 23, 21, 5, 30);
+        double expectedScore = expiresAt.atZone(ZoneId.of("Asia/Shanghai"))
+                .toInstant().toEpochMilli();
+        when(redis.opsForZSet()).thenReturn(zSet);
+
+        service.addOrderToZSet(500L, expiresAt);
+
+        verify(zSet).add("order:expiry", "500", expectedScore);
+    }
+
+    @Test
+    void addOrderToZSet_redisFailureDoesNotHideCommittedOrder() {
+        LocalDateTime expiresAt = LocalDateTime.of(2026, 9, 23, 21, 5, 30);
+        when(redis.opsForZSet()).thenReturn(zSet);
+        when(zSet.add(eq("order:expiry"), eq("500"), anyDouble()))
+                .thenThrow(new RedisConnectionFailureException("Redis down"));
+
+        assertDoesNotThrow(() -> service.addOrderToZSet(500L, expiresAt));
+    }
+
+    @Test
+    void findExpiredOrderIds_returnsEmptyListWhenRedisReturnsNull() {
+        when(redis.opsForZSet()).thenReturn(zSet);
+        when(zSet.rangeByScore(eq("order:expiry"), eq(Double.NEGATIVE_INFINITY),
+                anyDouble(), eq(0L), eq(20L))).thenReturn(null);
+
+        assertEquals(List.of(), service.findExpiredOrderIds());
+    }
+
+    @Test
+    void findExpiredOrderIds_convertsRedisMembersToLongs() {
+        when(redis.opsForZSet()).thenReturn(zSet);
+        when(zSet.rangeByScore(eq("order:expiry"), eq(Double.NEGATIVE_INFINITY),
+                anyDouble(), eq(0L), eq(20L)))
+                .thenReturn(new LinkedHashSet<>(List.of("501", "502")));
+
+        assertEquals(List.of(501L, 502L), service.findExpiredOrderIds());
     }
 }

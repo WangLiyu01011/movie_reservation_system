@@ -26,7 +26,7 @@ public class MovieCacheService {
     private static final String MOVIE_LOCK_PREFIX = "lock:movie:v1:detail:";
     private static final String NULL_VALUE = "__NULL__";
     private static final Duration REBUILD_LOCK_TTL = Duration.ofSeconds(10);
-    private static final RedisScript<Long> RELEASE_LOCK_SCRIPT = script("redis/lock-release-request.lua");
+    private static final RedisScript<Long> RELEASE_LOCK_SCRIPT = script("redis/lock-release-request.lua", Long.class);
 
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;

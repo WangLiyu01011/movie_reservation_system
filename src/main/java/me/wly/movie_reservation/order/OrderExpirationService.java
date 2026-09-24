@@ -28,10 +28,20 @@ public class OrderExpirationService {
 
     /** 创建独立的新事务处理单个对象，确保不会导致一整个批次回滚 */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean expireOne(Long orderId, LocalDateTime now) {
+    public OrderExpirationResult expireOne(Long orderId, LocalDateTime now) {
         return orderRepository.findByIdForUpdate(orderId)
-                .map(order -> expireLockedOrder(order, now))
-                .orElse(false);
+                .map(order -> {
+                    if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+                        return OrderExpirationResult.ALREADY_TERMINAL;
+                    }
+                    if (order.getExpiresAt() != null && order.getExpiresAt().isAfter(now)) {
+                        return OrderExpirationResult.NOT_DUE;
+                    }
+
+                    expireLockedOrder(order, now);
+                    return OrderExpirationResult.EXPIRED;
+                })
+                .orElse(OrderExpirationResult.NOT_FOUND);
     }
 
     /**

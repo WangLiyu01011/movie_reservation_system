@@ -7,7 +7,6 @@ import me.wly.movie_reservation.order.dto.OrderCreateDTO;
 import me.wly.movie_reservation.order.model.Order;
 import me.wly.movie_reservation.order.model.OrderStatus;
 import me.wly.movie_reservation.order.model.OrderSeat;
-import me.wly.movie_reservation.order.vo.OrderCreateVO;
 import me.wly.movie_reservation.showtime.ShowtimeRepository;
 import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
 import me.wly.movie_reservation.showtime.model.SeatStatus;
@@ -44,8 +43,6 @@ class OrderCreationServiceTest {
     @Mock
     private OrderRepository orderRepository;
     @Mock
-    private OrderMapper orderMapper;
-    @Mock
     private ShowtimeRepository showtimeRepository;
     @Mock
     private EntityManager entityManager;
@@ -60,11 +57,6 @@ class OrderCreationServiceTest {
         ShowtimeSeat a2 = showtimeSeat(102L, showtime, 2L, SeatStatus.AVAILABLE);
         OrderCreateDTO dto = new OrderCreateDTO(20L, List.of(1L, 2L), "order-request-1");
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(5);
-        OrderCreateVO expectedVO = new OrderCreateVO(
-                "odr_test", OrderStatus.PENDING_PAYMENT, new BigDecimal("100.00"), expiresAt,
-                "测试电影", "测试影院", "一号厅", showtime.getStartTime(), showtime.getEndTime(), List.of()
-        );
-
         when(orderRepository.findByUser_IdAndRequestId(10L, "order-request-1")).thenReturn(Optional.empty());
         when(showtimeRepository.findById(20L)).thenReturn(Optional.of(showtime));
         when(showtimeSeatRepository.findAllForUpdate(20L, List.of(1L, 2L))).thenReturn(List.of(a1, a2));
@@ -80,9 +72,7 @@ class OrderCreationServiceTest {
             order.setExpiresAt(expiresAt);
             return null;
         }).when(entityManager).refresh(any(Order.class));
-        when(orderMapper.toCreateVO(any(Order.class))).thenReturn(expectedVO);
-
-        OrderCreateVO result = orderService.createOrder(dto, user);
+        Order result = orderService.createOrder(dto, user);
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).saveAndFlush(orderCaptor.capture());
@@ -94,7 +84,7 @@ class OrderCreationServiceTest {
         verify(entityManager).refresh(savedOrder);
         assertLockedByOrder(a1, savedOrder, "order-request-1", expiresAt);
         assertLockedByOrder(a2, savedOrder, "order-request-1", expiresAt);
-        assertSame(expectedVO, result);
+        assertSame(savedOrder, result);
     }
 
     @Test
@@ -102,18 +92,13 @@ class OrderCreationServiceTest {
         User user = user(10L, "customer");
         Order existingOrder = order(500L, "odr_existing", user, OrderStatus.PENDING_PAYMENT,
                 LocalDateTime.now().plusMinutes(5));
-        OrderCreateVO expectedVO = new OrderCreateVO(
-                existingOrder.getCode(), existingOrder.getStatus(), BigDecimal.TEN, existingOrder.getExpiresAt(),
-                null, null, null, null, null, List.of()
-        );
         when(orderRepository.findByUser_IdAndRequestId(10L, "same-request")).thenReturn(Optional.of(existingOrder));
-        when(orderMapper.toCreateVO(existingOrder)).thenReturn(expectedVO);
 
-        OrderCreateVO result = orderService.createOrder(
+        Order result = orderService.createOrder(
                 new OrderCreateDTO(20L, List.of(1L), "same-request"), user
         );
 
-        assertSame(expectedVO, result);
+        assertSame(existingOrder, result);
         verifyNoInteractions(showtimeRepository, showtimeSeatRepository);
         verify(orderRepository, never()).saveAndFlush(any());
     }
@@ -159,7 +144,6 @@ class OrderCreationServiceTest {
                 new OrderCreateDTO(21L, List.of(1L), "same-request"), 10L));
 
         assertEquals(ResultCode.IDEMPOTENCY_CONFLICT, exception.resultCode);
-        verifyNoInteractions(orderMapper);
     }
 
     @Test
@@ -182,11 +166,8 @@ class OrderCreationServiceTest {
         second.setShowtimeSeat(showtimeSeat(102L, existing.getShowtime(), 2L, SeatStatus.LOCKED));
         existing.addOrderSeat(second);
         when(orderRepository.findByUser_IdAndRequestId(10L, "same-request")).thenReturn(Optional.of(existing));
-        OrderCreateVO expected = new OrderCreateVO("odr_existing", OrderStatus.PENDING_PAYMENT, BigDecimal.TEN,
-                existing.getExpiresAt(), null, null, null, null, null, List.of());
-        when(orderMapper.toCreateVO(existing)).thenReturn(expected);
 
-        assertSame(expected, orderService.findExisting(
+        assertSame(existing, orderService.findExisting(
                 new OrderCreateDTO(20L, List.of(2L, 1L), "same-request"), 10L).orElseThrow());
     }
 

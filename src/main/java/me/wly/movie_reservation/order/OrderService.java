@@ -49,7 +49,8 @@ public class OrderService {
         // 查询数据库获取用户id
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND, "User not found"));
-        Optional<OrderCreateVO> existing = orderCreationService.findExisting(dto, user.getId());
+        Optional<OrderCreateVO> existing = orderCreationService.findExisting(dto, user.getId())
+                                                               .map(orderMapper::toCreateVO);
         if (existing.isPresent()) {
             // 订单已成功创建入库，返回原订单
             return existing.get();
@@ -58,7 +59,8 @@ public class OrderService {
         OrderCacheService.RequestPermit permit = orderCacheService.acquireRequest(user.getId(), dto.requestId());
         try {
             // 防止数据库查询和SET NX之间有相同订单写入
-            existing = orderCreationService.findExisting(dto, user.getId());
+            existing = orderCreationService.findExisting(dto, user.getId())
+                                                .map(orderMapper::toCreateVO);
             if (existing.isPresent()) {
                 return existing.get();
             }
@@ -70,10 +72,13 @@ public class OrderService {
             // 确认请求限流限制，若超限抛出异常
             orderCacheService.checkRateLimit(user.getId());
             try {
-                return orderCreationService.createOrder(dto, user);
+                Order created = orderCreationService.createOrder(dto, user);
+                orderCacheService.addOrderToZSet(created.getId(), created.getExpiresAt());
+                return orderMapper.toCreateVO(created);
             } catch (BusinessException | DataIntegrityViolationException exception) {
                 // 抛出异常，创建事务rollback之前确认是否已有写入
-                Optional<OrderCreateVO> committed = orderCreationService.findExisting(dto, user.getId());
+                Optional<OrderCreateVO> committed = orderCreationService.findExisting(dto, user.getId())
+                        .map(orderMapper::toCreateVO);
                 if (committed.isPresent()) {
                     return committed.get();
                 }

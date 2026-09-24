@@ -7,7 +7,6 @@ import me.wly.movie_reservation.common.exception.ResultCode;
 import me.wly.movie_reservation.order.dto.OrderCreateDTO;
 import me.wly.movie_reservation.order.model.Order;
 import me.wly.movie_reservation.order.model.OrderSeat;
-import me.wly.movie_reservation.order.vo.OrderCreateVO;
 import me.wly.movie_reservation.showtime.ShowtimeRepository;
 import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
 import me.wly.movie_reservation.showtime.model.SeatStatus;
@@ -29,27 +28,26 @@ import java.util.Optional;
 public class OrderCreationService {
     private final ShowtimeSeatRepository showtimeSeatRepository;
     private final OrderRepository orderRepository;
-    private final OrderMapper orderMapper;
     private final ShowtimeRepository showtimeRepository;
     private final EntityManager entityManager;
 
     @Transactional(readOnly = true)
-    public Optional<OrderCreateVO> findExisting(OrderCreateDTO dto, Long userId) {
+    public Optional<Order> findExisting(OrderCreateDTO dto, Long userId) {
         return orderRepository.findByUser_IdAndRequestId(userId, dto.requestId())
                 .map(order -> {
                     validateExistingRequest(order, dto);
-                    return orderMapper.toCreateVO(order);
+                    return order;
                 });
     }
 
     @Transactional
-    public OrderCreateVO createOrder(OrderCreateDTO dto, User user) {
+    public Order createOrder(OrderCreateDTO dto, User user) {
         Order existingOrder = orderRepository.findByUser_IdAndRequestId(user.getId(), dto.requestId())
                 .orElse(null);
 
         if (existingOrder != null) {
             validateExistingRequest(existingOrder, dto);
-            return orderMapper.toCreateVO(existingOrder);
+            return existingOrder;
         }
 
         Showtime showtime = showtimeRepository.findById(dto.showtimeId())
@@ -106,7 +104,7 @@ public class OrderCreationService {
             showtimeSeat.setLockUntil(expiresAt);
         }
 
-        return orderMapper.toCreateVO(savedOrder);
+        return savedOrder;
     }
 
     // 判断是否存在requestId重复

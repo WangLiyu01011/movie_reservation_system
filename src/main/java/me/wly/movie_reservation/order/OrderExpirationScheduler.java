@@ -18,6 +18,7 @@ public class OrderExpirationScheduler {
 
     private final OrderRepository orderRepository;
     private final OrderExpirationService orderExpirationService;
+    private final OrderCacheService orderCacheService;
 
     @Scheduled(
             fixedDelayString = "${order.expire-scan-delay-ms:60000}",
@@ -34,6 +35,24 @@ public class OrderExpirationScheduler {
         for (Long orderId : orderIds) {
             try {
                 orderExpirationService.expireOne(orderId, now);
+            } catch (RuntimeException exception) {
+                log.error("Failed to expire order id={}", orderId, exception);
+            }
+        }
+    }
+
+    @Scheduled(
+            fixedDelayString = "${order.redis.expire-scan-delay:1s}"
+    )
+    public void expireOrdersFromRedis() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Long> orderIds = orderCacheService.findExpiredOrderIds();
+        for (Long orderId : orderIds) {
+            try {
+                OrderExpirationResult result = orderExpirationService.expireOne(orderId, now);
+                if (result.shouldRemoveFromZSet()) {
+                    orderCacheService.deleteOrderFromZSet(String.valueOf(orderId));
+                }
             } catch (RuntimeException exception) {
                 log.error("Failed to expire order id={}", orderId, exception);
             }

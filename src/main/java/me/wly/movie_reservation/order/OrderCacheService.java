@@ -8,7 +8,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static me.wly.movie_reservation.common.util.RedisScriptLoader.script;
@@ -17,8 +21,9 @@ import static me.wly.movie_reservation.common.util.RedisScriptLoader.script;
 @Service
 @RequiredArgsConstructor
 public class OrderCacheService {
-    private static final RedisScript<Long> RELEASE_SCRIPT = script("redis/lock-release-request.lua");
-    private static final RedisScript<Long> RATE_LIMIT_SCRIPT = script("redis/order-rate-limit.lua");
+    private static final RedisScript<Long> RELEASE_SCRIPT = script("redis/lock-release-request.lua", Long.class);
+    private static final RedisScript<Long> RATE_LIMIT_SCRIPT = script("redis/order-rate-limit.lua", Long.class);
+
     private final StringRedisTemplate stringRedisTemplate;
     private final OrderRedisProperties properties;
 
@@ -84,4 +89,52 @@ public class OrderCacheService {
         }
     }
 
+    public void addOrderToZSet(Long orderId, LocalDateTime expireAt) {
+        if(!properties.isEnabled()) {
+            return;
+        }
+        String key = "order:expiry";
+        try {
+            double milliScore = expireAt.atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli();
+            stringRedisTemplate.opsForZSet().add(key, orderId.toString(), milliScore);
+        } catch (DataAccessException exception) {
+            log.warn("Redis order expire set unavailable", exception);
+        }
+    }
+
+    public void deleteOrderFromZSet(String orderId) {
+        if(!properties.isEnabled()) {
+            return;
+        }
+        String key = "order:expiry";
+        try {
+            stringRedisTemplate.opsForZSet().remove(
+                    key,
+                    orderId
+            );
+        } catch (DataAccessException exception) {
+            log.warn("Redis order expire set unavailable", exception);
+        }
+    }
+
+    public List<Long> findExpiredOrderIds() {
+        if(!properties.isEnabled()) {
+            return new ArrayList<>();
+        }
+        double now = LocalDateTime.now().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli();
+        String key = "order:expiry";
+        try {
+
+            Set<String> expiredIds = stringRedisTemplate.opsForZSet().rangeByScore(
+                    key, Double.NEGATIVE_INFINITY, now, 0, properties.getBatchSizeForExpiration()
+            );
+            if (expiredIds == null || expiredIds.isEmpty()) {
+                return List.of();
+            }
+            return expiredIds.stream().map(Long::valueOf).toList();
+        } catch (DataAccessException exception) {
+            log.warn("Unable to get expired orders from redis", exception);
+            return new ArrayList<>();
+        }
+    }
 }

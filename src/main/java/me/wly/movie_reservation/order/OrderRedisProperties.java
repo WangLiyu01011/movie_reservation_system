@@ -26,7 +26,8 @@ public class OrderRedisProperties {
     private Duration expireScanDelay = Duration.ofSeconds(1);
     @Min(1)
     private int rateLimitMaxRequests = 3;
-
+    @Min(1)
+    private long batchSizeForExpiration = 20;
 
     @AssertTrue(message = "Order Redis TTL and rate limit window must be at least one hundred millisecond")
     public boolean isDurationConfigurationValid() {

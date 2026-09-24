@@ -14,6 +14,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -152,6 +154,20 @@ class OrderRedisIntegrationTest {
         awaitKeyExpiry("order:rate:create:{105}");
 
         assertDoesNotThrow(() -> service.checkRateLimit(105L));
+    }
+
+    @Test
+    void addingSameOrderAgain_updatesExpirationScore() {
+        OrderCacheService service = new OrderCacheService(redis, new OrderRedisProperties());
+        LocalDateTime firstExpiration = LocalDateTime.of(2026, 9, 23, 21, 5);
+        LocalDateTime updatedExpiration = firstExpiration.plusMinutes(2);
+
+        service.addOrderToZSet(900L, firstExpiration);
+        service.addOrderToZSet(900L, updatedExpiration);
+
+        assertEquals(1L, redis.opsForZSet().zCard("order:expiry"));
+        assertEquals((double) updatedExpiration.atZone(ZoneId.of("Asia/Shanghai"))
+                .toInstant().toEpochMilli(), redis.opsForZSet().score("order:expiry", "900"));
     }
 
     private void awaitKeyExpiry(String key) {
