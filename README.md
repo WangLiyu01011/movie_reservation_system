@@ -1,6 +1,6 @@
 # Movie Reservation System | 电影订票系统
 
-[中文](#中文说明) · [English](#english)
+[中文](#中文) · [English](#english)
 
 基于 Spring Boot 构建的电影订票后端学习项目，重点实践高并发下单、座位一致性、Redis 缓存与限流、订单超时、支付回调幂等以及数据库版本管理。
 
