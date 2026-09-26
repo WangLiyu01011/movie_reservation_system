@@ -42,6 +42,7 @@ public class MovieCacheService {
             return new CacheLookup(true, movie);
         }
 
+        // 空值键
         private static CacheLookup cachedNotFound() {
             return new CacheLookup(true, null);
         }
@@ -51,6 +52,7 @@ public class MovieCacheService {
         }
     }
 
+    /** 尝试获取Movie Detail */
     public MovieDetailVO getOrLoadDetail(
             String imdbId,
             Supplier<MovieDetailVO> databaseLoader
@@ -60,14 +62,15 @@ public class MovieCacheService {
         if (lookup.found()) {
             return lookup.movie();
         }
-
         return rebuildDetail(imdbId, cacheKey, databaseLoader);
     }
 
-    public void evictDetail(String imdbId) {
-        deleteCache(detailKey(imdbId));
-    }
 
+    /** 重建缓存：
+     *  1. 尝试通过redis互斥锁限制并发的数据库请求（缓存击穿）
+     *  2. 获取锁之后进行二次look up，若未重建成功则进行缓存重建并返回查询结果
+     *  3. 未获取锁，等待并尝试再次读取缓存。若超过等待上限查询数据库（此时可能有击穿风险）
+     */
     private MovieDetailVO rebuildDetail(
             String imdbId,
             String cacheKey,
@@ -83,6 +86,7 @@ public class MovieCacheService {
 
         if (lockResult == LockResult.ACQUIRED) {
             try {
+                // 获取锁的过程中可能存在其他请求将缓存重建成功
                 CacheLookup secondLookup = readDetail(cacheKey);
                 if (secondLookup.found()) {
                     return secondLookup.movie();
@@ -93,6 +97,7 @@ public class MovieCacheService {
             }
         }
 
+        // 已经有重建中的请求，进行缓存读取重试
         for (int retry = 0; retry < 5; retry++) {
             if (!sleepBriefly()) {
                 break;
@@ -106,6 +111,7 @@ public class MovieCacheService {
         return loadAndCache(cacheKey, databaseLoader);
     }
 
+    //
     private MovieDetailVO loadAndCache(
             String cacheKey,
             Supplier<MovieDetailVO> databaseLoader
@@ -119,6 +125,7 @@ public class MovieCacheService {
         return movie;
     }
 
+    // 尝试从缓存读取Movie Detail
     private CacheLookup readDetail(String key) {
         String cachedJson = getCache(key);
         if (cachedJson == null) {
@@ -172,6 +179,7 @@ public class MovieCacheService {
         }
     }
 
+    // 设置电影缓存，加入了TTL随机偏移避免缓存雪崩
     private void setMovieCache(String key, MovieDetailVO movie) {
         try {
             String json = objectMapper.writeValueAsString(movie);
@@ -185,6 +193,7 @@ public class MovieCacheService {
         }
     }
 
+    // 为特定键设置空值缓存防止缓存穿透
     private void setNullCache(String key) {
         try {
             stringRedisTemplate.opsForValue().set(key, NULL_VALUE, Duration.ofSeconds(60));
