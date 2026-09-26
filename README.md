@@ -2,9 +2,9 @@
 
 [中文](#中文) · [English](#english)
 
-基于 Spring Boot 构建的电影订票后端学习项目，重点实践高并发下单、座位一致性、Redis 缓存与限流、订单超时、支付回调幂等。
+基于 Spring Boot 构建的电影订票后端学习项目，重点实践复杂业务逻辑设计、用户鉴权、高并发下单、Redis 缓存与限流、支付状态管理等高可用性后端设计要点。
 
-A Spring Boot backend learning project focused on concurrent seat booking, consistency, Redis caching and rate limiting, order expiration, idempotent payment callbacks.
+A Spring Boot backend learning project focused on key aspects of high-availability backend design, such as complex business logic implementation, user authentication and authorization, high-concurrency order processing, Redis caching and rate limiting, and payment status management.
 
 项目最初的需求灵感来自 [roadmap.sh Movie Reservation System](https://roadmap.sh/projects/movie-reservation-system)。
 
