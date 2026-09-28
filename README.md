@@ -106,7 +106,7 @@ src/main/java/me/wly/movie_reservation/
 
 src/main/resources/
 ├── db/migration/
-│   └── V1__init_schema.sql       当前完整数据库结构
+│   └── B1__init_schema_shanghai.sql       当前完整数据库结构
 └── redis/           Redis Lua 脚本
 
 scripts/
@@ -129,7 +129,7 @@ scripts/
 示例 JDBC URL 已包含 `createDatabaseIfNotExist=true`。只要 MySQL 用户拥有建库权限，第一次启动应用就会自动：
 
 1. 创建不存在的 `movie_db`；
-2. 执行 `V1__init_schema.sql`，一次建立当前全部表、索引、约束和触发器；
+2. 执行 `B1__init_schema_shanghai.sql`，一次建立当前全部表、索引、约束和触发器；
 3. 使用 Hibernate `ddl-auto=validate` 校验实体映射。
 
 因此，从 GitHub 拉取项目后不需要手动执行建表脚本。如果 MySQL 用户没有建库权限，只需先执行：
@@ -182,6 +182,7 @@ export PAYMENT_MOCK_CALLBACK_SECRET='your-hmac-secret'
 | POST | `/api/v1/halls` | 系统/影院管理员 | 创建影厅和座位图 |
 | PUT | `/api/v1/halls/{hallId}` | 系统/影院管理员 | 修改影厅基本信息 |
 | GET | `/api/v1/showtimes` | 已登录 | 查询影院场次 |
+| GET | `/api/v1/showtimes/search` | 已登录 | 按电影、城市/行政区、开始时间范围和余座数量查询候选场次 |
 | POST | `/api/v1/showtimes` | 影院管理员 | 创建场次及场次座位 |
 | GET | `/api/v1/orders` | 已登录 | 查询当前用户订单 |
 | POST | `/api/v1/orders` | 已登录 | 创建订单并锁座 |
@@ -338,7 +339,7 @@ src/main/java/me/wly/movie_reservation/
 
 src/main/resources/
 ├── db/migration/
-│   └── V1__init_schema.sql       Complete current database schema
+│   └── B1__init_schema_shanghai.sql       Complete current database schema
 └── redis/           Redis Lua scripts
 
 scripts/
@@ -361,7 +362,7 @@ scripts/
 The example JDBC URL contains `createDatabaseIfNotExist=true`. If the MySQL user has permission to create databases, the first application startup will automatically:
 
 1. Create `movie_db` if it does not exist.
-2. Run `V1__init_schema.sql` to create all current tables, indexes, constraints, and triggers.
+2. Run `B1__init_schema_shanghai.sql` to create all current tables, indexes, constraints, and triggers.
 3. Validate the entity mappings with Hibernate `ddl-auto=validate`.
 
 There is no need for a fresh GitHub checkout to run schema scripts manually. If the MySQL user cannot create databases, create only the empty database first:
@@ -416,6 +417,7 @@ The API is available at `http://localhost:8080`. Flyway runs automatically on st
 | POST | `/api/v1/halls` | System/theater administrator | Create a hall and its seat map |
 | PUT | `/api/v1/halls/{hallId}` | System/theater administrator | Update basic hall information |
 | GET | `/api/v1/showtimes` | Authenticated | List theater showtimes |
+| GET | `/api/v1/showtimes/search` | Authenticated | Search candidate showtimes by movie, city/district, start-time range and available seats |
 | POST | `/api/v1/showtimes` | Theater administrator | Create a showtime and its showtime seats |
 | GET | `/api/v1/orders` | Authenticated | List the current user's orders |
 | POST | `/api/v1/orders` | Authenticated | Create an order and reserve seats |
@@ -477,4 +479,3 @@ This test starts a temporary Redis process on a random port with persistence dis
 - Add tracing, metrics, alerts, and gateway-level protection.
 - Evaluate Redis Streams or a message queue for high-concurrency event booking and asynchronous workflows.
 - Build the customer-facing movie, seat selection, and payment frontend.
-

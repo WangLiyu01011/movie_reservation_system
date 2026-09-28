@@ -25,6 +25,8 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class OrderCacheServiceTest {
+    private final java.time.Clock businessClock = java.time.Clock.fixed(
+            java.time.Instant.parse("2030-01-01T04:00:00Z"), ZoneId.of("Asia/Shanghai"));
     @Mock private StringRedisTemplate redis;
     @Mock private ValueOperations<String, String> values;
     @Mock private ZSetOperations<String, String> zSet;
@@ -34,7 +36,7 @@ class OrderCacheServiceTest {
     @BeforeEach
     void setUp() {
         properties = new OrderRedisProperties();
-        service = new OrderCacheService(redis, properties);
+        service = new OrderCacheService(businessClock, redis, properties);
     }
 
     @Test
@@ -76,7 +78,7 @@ class OrderCacheServiceTest {
         assertEquals(OrderCacheService.RequestState.REDIS_UNAVAILABLE,
                 service.acquireRequest(10L, "request-1").state());
         assertDoesNotThrow(() -> service.checkRateLimit(10L));
-        assertDoesNotThrow(() -> service.addOrderToZSet(50L, LocalDateTime.now()));
+        assertDoesNotThrow(() -> service.addOrderToZSet(50L, LocalDateTime.now(businessClock)));
         verifyNoInteractions(redis);
     }
 
@@ -177,5 +179,7 @@ class OrderCacheServiceTest {
                 .thenReturn(new LinkedHashSet<>(List.of("501", "502")));
 
         assertEquals(List.of(501L, 502L), service.findExpiredOrderIds());
+        verify(zSet).rangeByScore("order:expiry", Double.NEGATIVE_INFINITY,
+                (double) businessClock.millis(), 0L, 20L);
     }
 }

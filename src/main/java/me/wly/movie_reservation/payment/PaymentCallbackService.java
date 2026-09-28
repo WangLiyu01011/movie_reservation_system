@@ -20,12 +20,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.Clock;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class PaymentCallbackService {
+    private final Clock businessClock;
     private final PaymentCallbackEventRepository callbackEventRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final OrderRepository orderRepository;
@@ -134,7 +135,7 @@ public class PaymentCallbackService {
 
         order.setStatus(OrderStatus.PAID);
         order.setPaidAt(paidAt);
-        order.setUpdatedAt(LocalDateTime.now());
+        order.setUpdatedAt(LocalDateTime.now(businessClock));
 
         for (ShowtimeSeat seat : lockedSeats) {
             seat.setStatus(SeatStatus.SOLD);
@@ -170,7 +171,7 @@ public class PaymentCallbackService {
 
         if (order.getStatus() != OrderStatus.PAID) {
             order.setStatus(OrderStatus.REFUNDING);
-            order.setUpdatedAt(LocalDateTime.now());
+            order.setUpdatedAt(LocalDateTime.now(businessClock));
 
             List<ShowtimeSeat> lockedSeats = showtimeSeatRepository.findLockedByOrderIdForUpdate(order.getId());
             for (ShowtimeSeat seat : lockedSeats) {
@@ -207,7 +208,7 @@ public class PaymentCallbackService {
             VerifiedPaymentCallback callback
     ) {
         event.setDuplicateCount(event.getDuplicateCount() + 1);
-        event.setLastReceivedAt(LocalDateTime.now());
+        event.setLastReceivedAt(LocalDateTime.now(businessClock));
 
         if (!sameEvent(event, callback)) {
             throw new BusinessException(ResultCode.BAD_REQUEST,
@@ -228,6 +229,9 @@ public class PaymentCallbackService {
 
     private PaymentCallbackEvent toEvent(VerifiedPaymentCallback callback) {
         PaymentCallbackEvent event = new PaymentCallbackEvent();
+        LocalDateTime receivedAt = LocalDateTime.now(businessClock);
+        event.setReceivedAt(receivedAt);
+        event.setLastReceivedAt(receivedAt);
         event.setChannel(callback.channel());
         event.setEventId(callback.eventId());
         event.setPaymentNo(callback.paymentNo());
@@ -249,7 +253,7 @@ public class PaymentCallbackService {
     ) {
         event.setProcessStatus(processStatus);
         event.setProcessingMessage(message);
-        event.setProcessedAt(LocalDateTime.now());
+        event.setProcessedAt(LocalDateTime.now(businessClock));
     }
 
     private void reject(PaymentCallbackEvent event, String message) {
@@ -271,6 +275,6 @@ public class PaymentCallbackService {
         if (instant == null) {
             return null;
         }
-        return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
+        return LocalDateTime.ofInstant(instant, businessClock.getZone());
     }
 }

@@ -38,6 +38,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceTest {
+    private java.time.Clock businessClock = java.time.Clock.fixed(
+            java.time.Instant.parse("2026-09-28T04:00:00Z"),
+            me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE);
+
     @Mock
     private PaymentTransactionRepository paymentTransactionRepository;
     @Mock
@@ -50,13 +54,17 @@ class PaymentServiceTest {
     private MockPaymentGateway mockPaymentGateway;
     @Mock
     private EntityManager entityManager;
-    @InjectMocks
     private PaymentService paymentService;
+    @org.junit.jupiter.api.BeforeEach
+    void setUpClock() {
+        paymentService = new PaymentService(businessClock, paymentTransactionRepository, orderRepository,
+                userRepository, orderExpirationService, mockPaymentGateway, entityManager);
+    }
 
     @Test
     void createPayment_usesServerSideOrderAmount() {
         User user = user(10L, "customer");
-        Order order = order(500L, "odr_test", user, LocalDateTime.now().plusMinutes(5));
+        Order order = order(500L, "odr_test", user, LocalDateTime.now(businessClock).plusMinutes(5));
         PaymentRequestDTO dto = new PaymentRequestDTO("odr_test", " alipay ", "payment-request-1");
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
         when(orderRepository.findByCodeAndUserIdForUpdate("odr_test", 10L)).thenReturn(Optional.of(order));
@@ -101,7 +109,7 @@ class PaymentServiceTest {
     @Test
     void createPayment_returnsSamePaymentForRepeatedRequestId() {
         User user = user(10L, "customer");
-        Order order = order(500L, "odr_test", user, LocalDateTime.now().plusMinutes(5));
+        Order order = order(500L, "odr_test", user, LocalDateTime.now(businessClock).plusMinutes(5));
         PaymentTransaction existing = payment(700L, "pay_existing", order, "payment-request-1", PaymentStatus.CREATED);
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
         when(orderRepository.findByCodeAndUserIdForUpdate("odr_test", 10L)).thenReturn(Optional.of(order));
@@ -120,7 +128,7 @@ class PaymentServiceTest {
     @Test
     void createPayment_reusesExistingActivePaymentForDifferentRequestId() {
         User user = user(10L, "customer");
-        Order order = order(500L, "odr_test", user, LocalDateTime.now().plusMinutes(5));
+        Order order = order(500L, "odr_test", user, LocalDateTime.now(businessClock).plusMinutes(5));
         PaymentTransaction active = payment(701L, "pay_active", order, "old-request", PaymentStatus.PAYING);
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
         when(orderRepository.findByCodeAndUserIdForUpdate("odr_test", 10L)).thenReturn(Optional.of(order));
@@ -142,7 +150,7 @@ class PaymentServiceTest {
     @Test
     void createPayment_delegatesExpiredOrderToExpirationService() {
         User user = user(10L, "customer");
-        Order order = order(500L, "odr_expired", user, LocalDateTime.now().minusSeconds(1));
+        Order order = order(500L, "odr_expired", user, LocalDateTime.now(businessClock).minusSeconds(1));
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
         when(orderRepository.findByCodeAndUserIdForUpdate("odr_expired", 10L)).thenReturn(Optional.of(order));
         when(orderExpirationService.expireLockedOrder(eq(order), any(LocalDateTime.class))).thenReturn(true);

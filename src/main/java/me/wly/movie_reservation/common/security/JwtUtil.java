@@ -11,9 +11,13 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.time.Clock;
+import lombok.RequiredArgsConstructor;
 
 @Component
+@RequiredArgsConstructor
 public class JwtUtil {
+    private final Clock businessClock;
 
     @Value("${jwt.secret}")
     private String secret;
@@ -30,7 +34,7 @@ public class JwtUtil {
 
     public record TokenResult(String token, Long expireTime){}
     public TokenResult generateToken(String username) {
-        Date now = new Date();
+        Date now = Date.from(businessClock.instant());
         Date expireDate = new Date(now.getTime() + expirationMs);
 
         String token = Jwts.builder()
@@ -62,6 +66,7 @@ public class JwtUtil {
     //
     private Claims parseClaims(String token) {
         return Jwts.parser()
+                .clock(() -> Date.from(businessClock.instant()))
                 .verifyWith(key)
                 .build()
                 .parseSignedClaims(token)

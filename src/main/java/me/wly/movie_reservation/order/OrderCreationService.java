@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -26,6 +27,7 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class OrderCreationService {
+    private final Clock businessClock;
     private final ShowtimeSeatRepository showtimeSeatRepository;
     private final OrderRepository orderRepository;
     private final ShowtimeRepository showtimeRepository;
@@ -52,7 +54,7 @@ public class OrderCreationService {
 
         Showtime showtime = showtimeRepository.findById(dto.showtimeId())
                 .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "Showtime not found"));
-        if (showtime.getStartTime() == null || !showtime.getStartTime().isAfter(LocalDateTime.now())) {
+        if (showtime.getStartTime() == null || !showtime.getStartTime().isAfter(LocalDateTime.now(businessClock))) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Cannot create an order for a started showtime");
         }
 

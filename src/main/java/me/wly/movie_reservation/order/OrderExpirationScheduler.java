@@ -8,12 +8,14 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.List;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class OrderExpirationScheduler {
+    private final Clock businessClock;
     private static final int BATCH_SIZE = 100;
 
     private final OrderRepository orderRepository;
@@ -25,7 +27,7 @@ public class OrderExpirationScheduler {
             initialDelayString = "${order.expire-scan-initial-delay-ms:10000}"
     )
     public void expireOrders() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(businessClock);
         List<Long> orderIds = orderRepository.findExpiredOrderIds(
                 OrderStatus.PENDING_PAYMENT,
                 now,
@@ -45,7 +47,7 @@ public class OrderExpirationScheduler {
             fixedDelayString = "${order.redis.expire-scan-delay:1s}"
     )
     public void expireOrdersFromRedis() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(businessClock);
         List<Long> orderIds = orderCacheService.findExpiredOrderIds();
         for (Long orderId : orderIds) {
             try {

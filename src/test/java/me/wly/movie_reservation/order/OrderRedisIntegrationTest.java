@@ -80,7 +80,7 @@ class OrderRedisIntegrationTest {
 
     @Test
     void concurrentDuplicateRequests_onlyOneAcquiresPermit() throws Exception {
-        OrderCacheService service = new OrderCacheService(redis, new OrderRedisProperties());
+        OrderCacheService service = new OrderCacheService(java.time.Clock.system(me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE), redis, new OrderRedisProperties());
         List<Callable<OrderCacheService.RequestPermit>> requests = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
             requests.add(() -> service.acquireRequest(101L, "same-request"));
@@ -99,7 +99,7 @@ class OrderRedisIntegrationTest {
 
     @Test
     void concurrentRateLimit_luaAllowsExactlyThreeOfOneHundredRequests() throws Exception {
-        OrderCacheService service = new OrderCacheService(redis, new OrderRedisProperties());
+        OrderCacheService service = new OrderCacheService(java.time.Clock.system(me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE), redis, new OrderRedisProperties());
         List<Callable<Boolean>> requests = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
             requests.add(() -> {
@@ -129,7 +129,7 @@ class OrderRedisIntegrationTest {
     void releaseOldOwner_doesNotDeleteNewOwnersLock() {
         OrderRedisProperties properties = new OrderRedisProperties();
         properties.setRequestLockTtl(Duration.ofMillis(100));
-        OrderCacheService service = new OrderCacheService(redis, properties);
+        OrderCacheService service = new OrderCacheService(java.time.Clock.system(me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE), redis, properties);
         var old = service.acquireRequest(104L, "request");
         assertEquals(OrderCacheService.RequestState.ACQUIRED, old.state());
         awaitKeyExpiry(old.key());
@@ -148,7 +148,7 @@ class OrderRedisIntegrationTest {
         OrderRedisProperties properties = new OrderRedisProperties();
         properties.setRateLimitWindow(Duration.ofMillis(200));
         properties.setRateLimitMaxRequests(1);
-        OrderCacheService service = new OrderCacheService(redis, properties);
+        OrderCacheService service = new OrderCacheService(java.time.Clock.system(me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE), redis, properties);
         service.checkRateLimit(105L);
         assertThrows(RateLimitException.class, () -> service.checkRateLimit(105L));
         awaitKeyExpiry("order:rate:create:{105}");
@@ -158,7 +158,7 @@ class OrderRedisIntegrationTest {
 
     @Test
     void addingSameOrderAgain_updatesExpirationScore() {
-        OrderCacheService service = new OrderCacheService(redis, new OrderRedisProperties());
+        OrderCacheService service = new OrderCacheService(java.time.Clock.system(me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE), redis, new OrderRedisProperties());
         LocalDateTime firstExpiration = LocalDateTime.of(2026, 9, 23, 21, 5);
         LocalDateTime updatedExpiration = firstExpiration.plusMinutes(2);
 

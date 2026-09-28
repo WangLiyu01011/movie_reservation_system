@@ -2,7 +2,9 @@ spring.application.name=movie_reservation
 spring.datasource.url=${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/movie_db?createDatabaseIfNotExist=true&useUnicode=true&allowPublicKeyRetrieval=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false}
 spring.datasource.username=${MYSQL_USERNAME:root}
 spring.datasource.password=${MYSQL_PASSWORD}
-# Flyway creates the complete schema from V1__init_schema.sql on first startup.
+# Every new pooled connection (including Flyway) uses Shanghai civil time.
+spring.datasource.hikari.connection-init-sql=SET SESSION time_zone = '+08:00'
+# New databases start at B1; existing databases retain their V1 migration history.
 spring.jpa.hibernate.ddl-auto=validate
 jwt.secret=${JWT_SECRET}
 jwt.expiration-ms=${JWT_EXPIRATION_MS:86400000}

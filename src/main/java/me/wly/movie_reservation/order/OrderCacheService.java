@@ -9,7 +9,7 @@ import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -21,6 +21,7 @@ import static me.wly.movie_reservation.common.util.RedisScriptLoader.script;
 @Service
 @RequiredArgsConstructor
 public class OrderCacheService {
+    private final Clock businessClock;
     private static final RedisScript<Long> RELEASE_SCRIPT = script("redis/lock-release-request.lua", Long.class);
     private static final RedisScript<Long> RATE_LIMIT_SCRIPT = script("redis/order-rate-limit.lua", Long.class);
 
@@ -95,7 +96,7 @@ public class OrderCacheService {
         }
         String key = "order:expiry";
         try {
-            double milliScore = expireAt.atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli();
+            double milliScore = expireAt.atZone(businessClock.getZone()).toInstant().toEpochMilli();
             stringRedisTemplate.opsForZSet().add(key, orderId.toString(), milliScore);
         } catch (DataAccessException exception) {
             log.warn("Redis order expire set unavailable", exception);
@@ -121,7 +122,7 @@ public class OrderCacheService {
         if(!properties.isEnabled()) {
             return new ArrayList<>();
         }
-        double now = LocalDateTime.now().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli();
+        double now = businessClock.millis();
         String key = "order:expiry";
         try {
 

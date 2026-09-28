@@ -22,11 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class PaymentService {
+    private final Clock businessClock;
     private static final List<PaymentStatus> ACTIVE_PAYMENT_STATUSES =
             List.of(PaymentStatus.CREATED, PaymentStatus.PAYING);
 
@@ -46,7 +48,7 @@ public class PaymentService {
         Order order = orderRepository.findByCodeAndUserIdForUpdate(dto.orderCode(), user.getId())
                 .orElseThrow(() -> new BusinessException(ResultCode.ORDER_NOT_FOUND, "Order not found"));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(businessClock);
         if (orderExpirationService.expireLockedOrder(order, now)) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Order has expired");
         }

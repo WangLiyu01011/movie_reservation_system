@@ -38,6 +38,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OrderCreationServiceTest {
+    private java.time.Clock businessClock = java.time.Clock.fixed(
+            java.time.Instant.parse("2026-09-28T04:00:00Z"),
+            me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE);
+
     @Mock
     private ShowtimeSeatRepository showtimeSeatRepository;
     @Mock
@@ -46,8 +50,12 @@ class OrderCreationServiceTest {
     private ShowtimeRepository showtimeRepository;
     @Mock
     private EntityManager entityManager;
-    @InjectMocks
     private OrderCreationService orderService;
+    @org.junit.jupiter.api.BeforeEach
+    void setUpClock() {
+        orderService = new OrderCreationService(businessClock, showtimeSeatRepository,
+                orderRepository, showtimeRepository, entityManager);
+    }
 
     @Test
     void createOrder_calculatesAmountCreatesOrderSeatsAndLocksShowtimeSeats() {
@@ -56,7 +64,7 @@ class OrderCreationServiceTest {
         ShowtimeSeat a1 = showtimeSeat(101L, showtime, 1L, SeatStatus.AVAILABLE);
         ShowtimeSeat a2 = showtimeSeat(102L, showtime, 2L, SeatStatus.AVAILABLE);
         OrderCreateDTO dto = new OrderCreateDTO(20L, List.of(1L, 2L), "order-request-1");
-        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(5);
+        LocalDateTime expiresAt = LocalDateTime.now(businessClock).plusMinutes(5);
         when(orderRepository.findByUser_IdAndRequestId(10L, "order-request-1")).thenReturn(Optional.empty());
         when(showtimeRepository.findById(20L)).thenReturn(Optional.of(showtime));
         when(showtimeSeatRepository.findAllForUpdate(20L, List.of(1L, 2L))).thenReturn(List.of(a1, a2));
@@ -91,7 +99,7 @@ class OrderCreationServiceTest {
     void createOrder_returnsExistingOrderForSameRequestId() {
         User user = user(10L, "customer");
         Order existingOrder = order(500L, "odr_existing", user, OrderStatus.PENDING_PAYMENT,
-                LocalDateTime.now().plusMinutes(5));
+                LocalDateTime.now(businessClock).plusMinutes(5));
         when(orderRepository.findByUser_IdAndRequestId(10L, "same-request")).thenReturn(Optional.of(existingOrder));
 
         Order result = orderService.createOrder(
@@ -137,7 +145,7 @@ class OrderCreationServiceTest {
     @Test
     void findExisting_rejectsRequestIdReuseForDifferentShowtime() {
         Order existing = order(500L, "odr_existing", user(10L, "customer"),
-                OrderStatus.PENDING_PAYMENT, LocalDateTime.now().plusMinutes(5));
+                OrderStatus.PENDING_PAYMENT, LocalDateTime.now(businessClock).plusMinutes(5));
         when(orderRepository.findByUser_IdAndRequestId(10L, "same-request")).thenReturn(Optional.of(existing));
 
         BusinessException exception = assertThrows(BusinessException.class, () -> orderService.findExisting(
@@ -149,7 +157,7 @@ class OrderCreationServiceTest {
     @Test
     void findExisting_rejectsRequestIdReuseForDifferentSeats() {
         Order existing = order(500L, "odr_existing", user(10L, "customer"),
-                OrderStatus.PENDING_PAYMENT, LocalDateTime.now().plusMinutes(5));
+                OrderStatus.PENDING_PAYMENT, LocalDateTime.now(businessClock).plusMinutes(5));
         when(orderRepository.findByUser_IdAndRequestId(10L, "same-request")).thenReturn(Optional.of(existing));
 
         BusinessException exception = assertThrows(BusinessException.class, () -> orderService.findExisting(
@@ -161,7 +169,7 @@ class OrderCreationServiceTest {
     @Test
     void findExisting_allowsSameSeatsInDifferentOrder() {
         Order existing = order(500L, "odr_existing", user(10L, "customer"),
-                OrderStatus.PENDING_PAYMENT, LocalDateTime.now().plusMinutes(5));
+                OrderStatus.PENDING_PAYMENT, LocalDateTime.now(businessClock).plusMinutes(5));
         OrderSeat second = new OrderSeat();
         second.setShowtimeSeat(showtimeSeat(102L, existing.getShowtime(), 2L, SeatStatus.LOCKED));
         existing.addOrderSeat(second);
@@ -185,8 +193,8 @@ class OrderCreationServiceTest {
         showtime.setMovieTitle("测试电影");
         showtime.setTheaterName("测试影院");
         showtime.setHallName("一号厅");
-        showtime.setStartTime(LocalDateTime.now().plusHours(2));
-        showtime.setEndTime(LocalDateTime.now().plusHours(4));
+        showtime.setStartTime(LocalDateTime.now(businessClock).plusHours(2));
+        showtime.setEndTime(LocalDateTime.now(businessClock).plusHours(4));
         return showtime;
     }
 

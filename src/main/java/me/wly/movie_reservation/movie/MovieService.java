@@ -7,6 +7,7 @@ import me.wly.movie_reservation.movie.vo.MovieVO;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.List;
 
 import me.wly.movie_reservation.common.exception.ResultCode;
@@ -15,6 +16,7 @@ import me.wly.movie_reservation.common.exception.BusinessException;
 @Service
 @RequiredArgsConstructor
 public class MovieService {
+    private final Clock businessClock;
     private final MovieRepository movieRepository;
     private final MovieMapper movieMapper;
     private final MovieCacheService movieCacheService;
@@ -47,7 +49,7 @@ public class MovieService {
     }
 
     public List<MovieVO> getUpcomingMovies(){
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(businessClock);
 
         List<Movie> movies = movieRepository.findMoviesByReleaseDateGreaterThan(now);
         return movies.stream().map(entity -> new MovieVO(entity.getTitle(), entity.getReleaseDate(), entity.getPosterImageURL()))
@@ -55,7 +57,7 @@ public class MovieService {
     }
 
     public List<MovieVO> getShowingMovies(){
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(businessClock);
         List<Movie> movies = movieRepository.findOnShowingMovies(now);
         return movies.stream().map(entity -> new MovieVO(entity.getTitle(), entity.getReleaseDate(), entity.getPosterImageURL()))
                 .toList();

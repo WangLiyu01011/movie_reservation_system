@@ -42,6 +42,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentCallbackServiceTest {
+    private java.time.Clock businessClock = java.time.Clock.fixed(
+            java.time.Instant.parse("2026-09-28T04:00:00Z"),
+            me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE);
+
     private static final Long ORDER_ID = 100L;
     private static final String PAYMENT_NO = "pay_test";
     private static final String PROVIDER_TRADE_NO = "mock_trade_test";
@@ -59,8 +63,12 @@ class PaymentCallbackServiceTest {
     private OrderRepository orderRepository;
     @Mock
     private ShowtimeSeatRepository showtimeSeatRepository;
-    @InjectMocks
     private PaymentCallbackService paymentCallbackService;
+    @org.junit.jupiter.api.BeforeEach
+    void setUpClock() {
+        paymentCallbackService = new PaymentCallbackService(businessClock, callbackEventRepository,
+                paymentTransactionRepository, orderRepository, showtimeSeatRepository);
+    }
 
     @Test
     void handleCallback_marksOrderPaidAndSeatsSoldForValidSuccess() {
@@ -87,6 +95,9 @@ class PaymentCallbackServiceTest {
         assertSold(seatB, order);
 
         PaymentCallbackEvent event = savedEvent();
+        assertEquals(LocalDateTime.now(businessClock), event.getReceivedAt());
+        assertEquals(event.getReceivedAt(), event.getLastReceivedAt());
+        assertEquals(LocalDateTime.of(2026, 9, 12, 10, 0), event.getPaidAt());
         assertEquals(CHANNEL, event.getChannel());
         assertEquals(EVENT_ID, event.getEventId());
         assertEquals(PAYMENT_NO, event.getPaymentNo());
@@ -550,7 +561,7 @@ class PaymentCallbackServiceTest {
     }
 
     private LocalDateTime paidAt() {
-        return LocalDateTime.ofInstant(PAID_AT, ZoneId.systemDefault());
+        return LocalDateTime.ofInstant(PAID_AT, businessClock.getZone());
     }
 
     private void assertSold(ShowtimeSeat seat, Order order) {

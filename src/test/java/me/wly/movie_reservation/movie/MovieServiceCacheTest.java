@@ -51,7 +51,7 @@ class MovieServiceCacheTest {
     void setUpRedisOperations() {
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
         MovieCacheService movieCacheService = new MovieCacheService(stringRedisTemplate, objectMapper);
-        movieService = new MovieService(movieRepository, movieMapper, movieCacheService);
+        movieService = new MovieService(java.time.Clock.system(me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE), movieRepository, movieMapper, movieCacheService);
     }
 
     @Test

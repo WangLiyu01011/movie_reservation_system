@@ -92,13 +92,10 @@ public class PaymentCallbackEvent {
 
     @PrePersist
     public void prePersist() {
-        LocalDateTime now = LocalDateTime.now();
         if (processStatus == null) {
             processStatus = PaymentCallbackProcessStatus.RECEIVED;
         }
-        if (receivedAt == null) {
-            receivedAt = now;
-        }
+        java.util.Objects.requireNonNull(receivedAt, "receivedAt must be set using the business clock");
         if (lastReceivedAt == null) {
             lastReceivedAt = receivedAt;
         }
