@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -36,12 +35,12 @@ public class ShowtimeService {
     private final ShowtimeMapper showtimeMapper;
     private final UserRepository userRepository;
 
-    public List<ShowtimeDTO> getShowtimeList(Integer theaterId, String movieImdbId){
-        if(movieImdbId == null) {
+    public List<ShowtimeDTO> getShowtimeList(Integer theaterId, String imdbId){
+        if(imdbId == null) {
             List<Showtime> showtimeList = showtimeRepository.findShowtimeByTheater_Id(theaterId);
             return showtimeMapper.toDTOList(showtimeList);
         }
-        List<Showtime> showtimeList = showtimeRepository.findShowtimeByTheater_IdAndMovie_ImdbId(theaterId, movieImdbId);
+        List<Showtime> showtimeList = showtimeRepository.findShowtimeByTheater_IdAndMovie_ImdbId(theaterId, imdbId);
         return showtimeMapper.toDTOList(showtimeList);
     }
 
@@ -51,7 +50,7 @@ public class ShowtimeService {
                 .orElseThrow(()->new BusinessException(ResultCode.USER_NOT_FOUND, "Current user not found"));
         if(!theaterAdminRepository.existsByUser_IdAndTheater_Id(creator.getId(), newShowtime.theaterId())) {
             throw new BusinessException(ResultCode.FORBIDDEN, "No permission to manage target theater");
-        };
+        }
 
 
         if (!newShowtime.endTime().isAfter(newShowtime.startTime())) {

@@ -1,6 +1,7 @@
 package me.wly.movie_reservation.showtime;
 
 import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
+import me.wly.movie_reservation.showtime.dto.ShowtimeSeatCountDTO;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +15,16 @@ import java.util.List;
 
 @Repository
 public interface ShowtimeSeatRepository extends JpaRepository<ShowtimeSeat, Long> {
+    @Query("""
+            select new me.wly.movie_reservation.showtime.dto.ShowtimeSeatCountDTO(
+                showtimeSeat.showtime.id, count(showtimeSeat))
+            from ShowtimeSeat showtimeSeat
+            where showtimeSeat.showtime.id in :showtimeIds
+              and showtimeSeat.status = SeatStatus.AVAILABLE
+            group by showtimeSeat.showtime.id
+            """)
+    List<ShowtimeSeatCountDTO> countAvailableByShowtimeIds(@Param("showtimeIds") Collection<Long> showtimeIds);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select showtimeSeat from ShowtimeSeat showtimeSeat
