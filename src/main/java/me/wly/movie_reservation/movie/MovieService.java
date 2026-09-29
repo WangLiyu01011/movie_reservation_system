@@ -63,7 +63,7 @@ public class MovieService {
                 .toList();
     }
 
-    public List<Movie> getShowingMoviesForAi(LocalDateTime time) {
+    public List<Movie> getShowingMoviesOn(LocalDateTime time) {
         return movieRepository.findOnShowingMovies(time);
     }
 
