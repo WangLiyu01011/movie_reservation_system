@@ -14,7 +14,7 @@ public record ShowtimeSearchDTO(
         @Positive Integer districtId,
         @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startFrom,
         @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTo,
-        @Min(1) Integer minAvailableSeats, // 最小可用座位数
+        @Min(0) Integer minAvailableSeats, // 最小可用座位数
         @Min(0) Integer page, // 页数，从0开始算
         @Min(1) @Max(20) Integer size // 指定的每页数量
 ) {
