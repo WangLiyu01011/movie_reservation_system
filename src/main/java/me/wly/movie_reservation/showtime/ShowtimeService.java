@@ -60,15 +60,17 @@ public class ShowtimeService {
         Theater theater = theaterRepository.findById(newShowtime.theaterId())
                 .orElseThrow(()->new BusinessException(ResultCode.THEATER_NOT_FOUND, "Target theater not found: " + newShowtime.theaterId()));
 
-        Hall hall = hallRepository.findById(newShowtime.hallId())
+        // 同一影厅的排片操作先锁影厅行，锁持续到场次和座位创建事务结束。
+        Hall hall = hallRepository.findByIdForUpdate(newShowtime.hallId())
                 .orElseThrow(()->new BusinessException(ResultCode.HALL_NOT_FOUND, "Target hall not found: " + newShowtime.hallId()));
 
         if (!hall.getTheater().getId().equals(theater.getId())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Hall does not belong to the target theater");
         }
 
-        if (showtimeRepository.existsByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
-                hall.getId(), newShowtime.endTime(), newShowtime.startTime())) {
+        // 使用当前读，避免沿用等待影厅锁之前的旧快照。
+        if (showtimeRepository.findFirstByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
+                hall.getId(), newShowtime.endTime(), newShowtime.startTime()).isPresent()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Showtime overlaps an existing showtime in this hall");
         }
 

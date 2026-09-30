@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -72,9 +73,9 @@ class ShowtimeServiceTest {
         ShowtimeCreateDTO dto = validDto();
         authorizeAdminForTheater(1);
         when(theaterRepository.findById(1)).thenReturn(Optional.of(theater));
-        when(hallRepository.findById(2)).thenReturn(Optional.of(hall));
-        when(showtimeRepository.existsByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
-                2, dto.endTime(), dto.startTime())).thenReturn(false);
+        when(hallRepository.findByIdForUpdate(2)).thenReturn(Optional.of(hall));
+        when(showtimeRepository.findFirstByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
+                2, dto.endTime(), dto.startTime())).thenReturn(Optional.empty());
         when(movieRepository.findMovieByImdbId("tt001")).thenReturn(Optional.of(movie));
         when(seatRepository.findAllByHall_IdOrderByXAscYAsc(2)).thenReturn(List.of(
                 seat(11, hall, "A1", SeatType.NORMAL),
@@ -93,6 +94,14 @@ class ShowtimeServiceTest {
         });
 
         ShowtimeDTO result = showtimeService.createShowtime(dto, ADMIN_USERNAME);
+
+        var lockOrder = inOrder(hallRepository, showtimeRepository, showtimeSeatRepository);
+        lockOrder.verify(hallRepository).findByIdForUpdate(2);
+        lockOrder.verify(showtimeRepository).findFirstByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
+                2, dto.endTime(), dto.startTime());
+        lockOrder.verify(showtimeRepository).save(any(Showtime.class));
+        lockOrder.verify(showtimeSeatRepository).saveAll(anyList());
+        verify(hallRepository, never()).findById(any());
 
         ArgumentCaptor<List<ShowtimeSeat>> seatsCaptor = listCaptor();
         verify(showtimeSeatRepository).saveAll(seatsCaptor.capture());
@@ -127,7 +136,7 @@ class ShowtimeServiceTest {
         Hall otherTheaterHall = hall(2, "二号厅", theater(9, "滨江影城"));
         authorizeAdminForTheater(1);
         when(theaterRepository.findById(1)).thenReturn(Optional.of(requestedTheater));
-        when(hallRepository.findById(2)).thenReturn(Optional.of(otherTheaterHall));
+        when(hallRepository.findByIdForUpdate(2)).thenReturn(Optional.of(otherTheaterHall));
 
         assertThrows(BusinessException.class,
                 () -> showtimeService.createShowtime(validDto(), ADMIN_USERNAME));
@@ -143,16 +152,33 @@ class ShowtimeServiceTest {
         ShowtimeCreateDTO dto = validDto();
         authorizeAdminForTheater(1);
         when(theaterRepository.findById(1)).thenReturn(Optional.of(theater));
-        when(hallRepository.findById(2)).thenReturn(Optional.of(hall));
-        when(showtimeRepository.existsByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
-                2, dto.endTime(), dto.startTime())).thenReturn(true);
+        when(hallRepository.findByIdForUpdate(2)).thenReturn(Optional.of(hall));
+        when(showtimeRepository.findFirstByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
+                2, dto.endTime(), dto.startTime())).thenReturn(Optional.of(new Showtime()));
 
         assertThrows(BusinessException.class,
                 () -> showtimeService.createShowtime(dto, ADMIN_USERNAME));
 
+        var lockOrder = inOrder(hallRepository, showtimeRepository);
+        lockOrder.verify(hallRepository).findByIdForUpdate(2);
+        lockOrder.verify(showtimeRepository).findFirstByHall_IdAndStartTimeLessThanAndEndTimeGreaterThan(
+                2, dto.endTime(), dto.startTime());
+
         verify(movieRepository, never()).findMovieByImdbId(any());
         verify(seatRepository, never()).findAllByHall_IdOrderByXAscYAsc(any());
         verify(showtimeRepository, never()).save(any());
+    }
+
+    @Test
+    void createShowtime_rejectsMissingHallBeforeCheckingIntervals() {
+        authorizeAdminForTheater(1);
+        when(theaterRepository.findById(1)).thenReturn(Optional.of(theater(1, "西湖影城")));
+        when(hallRepository.findByIdForUpdate(2)).thenReturn(Optional.empty());
+
+        assertThrows(BusinessException.class,
+                () -> showtimeService.createShowtime(validDto(), ADMIN_USERNAME));
+
+        verifyNoInteractions(showtimeRepository, movieRepository, seatRepository, showtimeSeatRepository);
     }
 
     @Test
