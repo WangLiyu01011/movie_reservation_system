@@ -12,9 +12,7 @@ import me.wly.movie_reservation.payment.model.PaymentCallbackProcessStatus;
 import me.wly.movie_reservation.payment.model.PaymentCallbackStatus;
 import me.wly.movie_reservation.payment.model.PaymentStatus;
 import me.wly.movie_reservation.payment.model.PaymentTransaction;
-import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
-import me.wly.movie_reservation.showtime.model.SeatStatus;
-import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
+import me.wly.movie_reservation.showtime.ShowtimeSeatService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +28,7 @@ public class PaymentCallbackService {
     private final PaymentCallbackEventRepository callbackEventRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final OrderRepository orderRepository;
-    private final ShowtimeSeatRepository showtimeSeatRepository;
+    private final ShowtimeSeatService showtimeSeatService;
 
     /**
      * The order row is always locked first. The timeout job follows the same rule,
@@ -120,8 +118,7 @@ public class PaymentCallbackService {
             return;
         }
 
-        List<ShowtimeSeat> lockedSeats = showtimeSeatRepository.findLockedByOrderIdForUpdate(order.getId());
-        if (lockedSeats.isEmpty() || lockedSeats.size() != order.getOrderSeats().size()) {
+        if (!showtimeSeatService.markSoldForOrder(order)) {
             markRefundRequired(order, payment, callback, paidAt, event,
                     "The order no longer owns all of its locked seats");
             return;
@@ -136,12 +133,6 @@ public class PaymentCallbackService {
         order.setStatus(OrderStatus.PAID);
         order.setPaidAt(paidAt);
         order.setUpdatedAt(LocalDateTime.now(businessClock));
-
-        for (ShowtimeSeat seat : lockedSeats) {
-            seat.setStatus(SeatStatus.SOLD);
-            seat.setLockToken(null);
-            seat.setLockUntil(null);
-        }
 
         finishEvent(event, PaymentCallbackProcessStatus.PROCESSED,
                 "Payment succeeded and seats were sold");
@@ -172,14 +163,7 @@ public class PaymentCallbackService {
         if (order.getStatus() != OrderStatus.PAID) {
             order.setStatus(OrderStatus.REFUNDING);
             order.setUpdatedAt(LocalDateTime.now(businessClock));
-
-            List<ShowtimeSeat> lockedSeats = showtimeSeatRepository.findLockedByOrderIdForUpdate(order.getId());
-            for (ShowtimeSeat seat : lockedSeats) {
-                seat.setStatus(SeatStatus.AVAILABLE);
-                seat.setOrder(null);
-                seat.setLockToken(null);
-                seat.setLockUntil(null);
-            }
+            showtimeSeatService.releaseLockedForOrder(order);
         }
 
         finishEvent(event, PaymentCallbackProcessStatus.REFUND_REQUIRED, reason);

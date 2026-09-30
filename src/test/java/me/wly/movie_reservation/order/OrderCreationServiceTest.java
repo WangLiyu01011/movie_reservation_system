@@ -9,6 +9,7 @@ import me.wly.movie_reservation.order.model.OrderStatus;
 import me.wly.movie_reservation.order.model.OrderSeat;
 import me.wly.movie_reservation.showtime.ShowtimeRepository;
 import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
+import me.wly.movie_reservation.showtime.ShowtimeSeatService;
 import me.wly.movie_reservation.showtime.model.SeatStatus;
 import me.wly.movie_reservation.showtime.model.Showtime;
 import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
@@ -17,7 +18,6 @@ import me.wly.movie_reservation.user.model.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -38,7 +38,7 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OrderCreationServiceTest {
-    private java.time.Clock businessClock = java.time.Clock.fixed(
+    private final java.time.Clock businessClock = java.time.Clock.fixed(
             java.time.Instant.parse("2026-09-28T04:00:00Z"),
             me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE);
 
@@ -53,7 +53,7 @@ class OrderCreationServiceTest {
     private OrderCreationService orderService;
     @org.junit.jupiter.api.BeforeEach
     void setUpClock() {
-        orderService = new OrderCreationService(businessClock, showtimeSeatRepository,
+        orderService = new OrderCreationService(businessClock, new ShowtimeSeatService(showtimeSeatRepository),
                 orderRepository, showtimeRepository, entityManager);
     }
 
@@ -140,6 +140,28 @@ class OrderCreationServiceTest {
         ));
 
         verify(orderRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createOrder_rejectsAvailableSeatStillOwnedByAnotherOrder() {
+        User user = user(10L, "customer");
+        Showtime showtime = showtime(20L, new BigDecimal("50.00"));
+        ShowtimeSeat occupied = showtimeSeat(101L, showtime, 1L, SeatStatus.AVAILABLE);
+        Order owner = new Order();
+        owner.setId(499L);
+        occupied.setOrder(owner);
+        when(orderRepository.findByUser_IdAndRequestId(10L, "request-1")).thenReturn(Optional.empty());
+        when(showtimeRepository.findById(20L)).thenReturn(Optional.of(showtime));
+        when(showtimeSeatRepository.findAllForUpdate(20L, List.of(1L))).thenReturn(List.of(occupied));
+
+        assertThrows(BusinessException.class, () -> orderService.createOrder(
+                new OrderCreateDTO(20L, List.of(1L), "request-1"), user
+        ));
+
+        assertSame(owner, occupied.getOrder());
+        assertEquals(SeatStatus.AVAILABLE, occupied.getStatus());
+        verify(orderRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(entityManager);
     }
 
     @Test

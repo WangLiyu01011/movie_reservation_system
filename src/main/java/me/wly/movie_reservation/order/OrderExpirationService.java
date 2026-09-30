@@ -6,9 +6,7 @@ import me.wly.movie_reservation.order.model.OrderStatus;
 import me.wly.movie_reservation.payment.PaymentTransactionRepository;
 import me.wly.movie_reservation.payment.model.PaymentStatus;
 import me.wly.movie_reservation.payment.model.PaymentTransaction;
-import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
-import me.wly.movie_reservation.showtime.model.SeatStatus;
-import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
+import me.wly.movie_reservation.showtime.ShowtimeSeatService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,9 +21,8 @@ public class OrderExpirationService {
             List.of(PaymentStatus.CREATED, PaymentStatus.PAYING);
 
     private final OrderRepository orderRepository;
-    private final ShowtimeSeatRepository showtimeSeatRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
-
+    private final ShowtimeSeatService showtimeSeatService;
     /** 创建独立的新事务处理单个对象，确保不会导致一整个批次回滚 */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public OrderExpirationResult expireOne(Long orderId, LocalDateTime now) {
@@ -58,14 +55,7 @@ public class OrderExpirationService {
         order.setCancelledAt(now);
         order.setUpdatedAt(now);
 
-        List<ShowtimeSeat> lockedSeats = showtimeSeatRepository.findLockedByOrderIdForUpdate(order.getId());
-        for (ShowtimeSeat seat : lockedSeats) {
-            seat.setStatus(SeatStatus.AVAILABLE);
-            seat.setOrder(null);
-            seat.setLockToken(null);
-            seat.setLockUntil(null);
-        }
-
+        showtimeSeatService.releaseLockedForOrder(order);
         List<PaymentTransaction> activePayments = paymentTransactionRepository.findAllByOrder_IdAndStatusIn(
                 order.getId(), ACTIVE_PAYMENT_STATUSES
         );

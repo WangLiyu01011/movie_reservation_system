@@ -8,8 +8,7 @@ import me.wly.movie_reservation.order.dto.OrderCreateDTO;
 import me.wly.movie_reservation.order.model.Order;
 import me.wly.movie_reservation.order.model.OrderSeat;
 import me.wly.movie_reservation.showtime.ShowtimeRepository;
-import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
-import me.wly.movie_reservation.showtime.model.SeatStatus;
+import me.wly.movie_reservation.showtime.ShowtimeSeatService;
 import me.wly.movie_reservation.showtime.model.Showtime;
 import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
 import me.wly.movie_reservation.user.model.User;
@@ -28,7 +27,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class OrderCreationService {
     private final Clock businessClock;
-    private final ShowtimeSeatRepository showtimeSeatRepository;
+    private final ShowtimeSeatService showtimeSeatService;
     private final OrderRepository orderRepository;
     private final ShowtimeRepository showtimeRepository;
     private final EntityManager entityManager;
@@ -58,19 +57,8 @@ public class OrderCreationService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Cannot create an order for a started showtime");
         }
 
-        List<Long> seatIds = dto.seatIds();
-        if (seatIds.size() != new HashSet<>(seatIds).size()) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "Duplicate seats are not allowed");
-        }
-
-        // 查询座位并为所有座位上悲观锁
-        List<ShowtimeSeat> showtimeSeats = showtimeSeatRepository.findAllForUpdate(showtime.getId(), seatIds);
-        if (showtimeSeats.size() != seatIds.size()) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "One or more seats do not belong to this showtime");
-        }
-        if (showtimeSeats.stream().anyMatch(seat -> seat.getStatus() != SeatStatus.AVAILABLE)) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "One or more seats are unavailable");
-        }
+        List<ShowtimeSeat> showtimeSeats = showtimeSeatService.findAvailableForUpdate(
+                showtime.getId(), dto.seatIds());
 
         BigDecimal ticketPrice = showtime.getPrice();
         if (ticketPrice == null || ticketPrice.signum() < 0) {
@@ -98,13 +86,7 @@ public class OrderCreationService {
 
         Order savedOrder = orderRepository.saveAndFlush(created);
         entityManager.refresh(savedOrder);
-        LocalDateTime expiresAt = savedOrder.getExpiresAt();
-        for (ShowtimeSeat showtimeSeat : showtimeSeats) {
-            showtimeSeat.setStatus(SeatStatus.LOCKED);
-            showtimeSeat.setOrder(savedOrder);
-            showtimeSeat.setLockToken(dto.requestId());
-            showtimeSeat.setLockUntil(expiresAt);
-        }
+        showtimeSeatService.lockForOrder(savedOrder, showtimeSeats);
 
         return savedOrder;
     }

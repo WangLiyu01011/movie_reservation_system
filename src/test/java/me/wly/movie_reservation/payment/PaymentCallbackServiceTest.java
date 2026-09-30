@@ -12,6 +12,7 @@ import me.wly.movie_reservation.payment.model.PaymentCallbackStatus;
 import me.wly.movie_reservation.payment.model.PaymentStatus;
 import me.wly.movie_reservation.payment.model.PaymentTransaction;
 import me.wly.movie_reservation.showtime.ShowtimeSeatRepository;
+import me.wly.movie_reservation.showtime.ShowtimeSeatService;
 import me.wly.movie_reservation.showtime.model.SeatStatus;
 import me.wly.movie_reservation.showtime.model.ShowtimeSeat;
 import org.junit.jupiter.api.Test;
@@ -64,10 +65,12 @@ class PaymentCallbackServiceTest {
     @Mock
     private ShowtimeSeatRepository showtimeSeatRepository;
     private PaymentCallbackService paymentCallbackService;
+    private int nextSeatIndex;
     @org.junit.jupiter.api.BeforeEach
     void setUpClock() {
+        nextSeatIndex = 0;
         paymentCallbackService = new PaymentCallbackService(businessClock, callbackEventRepository,
-                paymentTransactionRepository, orderRepository, showtimeSeatRepository);
+                paymentTransactionRepository, orderRepository, new ShowtimeSeatService(showtimeSeatRepository));
     }
 
     @Test
@@ -475,7 +478,11 @@ class PaymentCallbackServiceTest {
         order.setExpiresAt(expiresAt);
         order.setTotalPrice(AMOUNT);
         for (int index = 0; index < seatCount; index++) {
-            order.getOrderSeats().add(new OrderSeat());
+            OrderSeat orderSeat = new OrderSeat();
+            ShowtimeSeat seat = new ShowtimeSeat();
+            seat.setId(1000L + index);
+            orderSeat.setShowtimeSeat(seat);
+            order.addOrderSeat(orderSeat);
         }
         return order;
     }
@@ -496,7 +503,7 @@ class PaymentCallbackServiceTest {
     }
 
     private ShowtimeSeat lockedSeat(Order order) {
-        ShowtimeSeat seat = new ShowtimeSeat();
+        ShowtimeSeat seat = order.getOrderSeats().get(nextSeatIndex++).getShowtimeSeat();
         seat.setStatus(SeatStatus.LOCKED);
         seat.setOrder(order);
         seat.setLockToken("lock-token");
