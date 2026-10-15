@@ -1,6 +1,7 @@
 package me.wly.movie_reservation.movie;
 
 import me.wly.movie_reservation.common.exception.BusinessException;
+import me.wly.movie_reservation.common.redis.RedisCircuitBreaker;
 import me.wly.movie_reservation.movie.model.Movie;
 import me.wly.movie_reservation.movie.vo.MovieDetailVO;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,13 +19,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,11 +45,13 @@ class MovieServiceCacheTest {
     @Mock
     private ObjectMapper objectMapper;
     private MovieService movieService;
+    private RedisCircuitBreaker redisCircuitBreaker;
 
     @BeforeEach
     void setUpRedisOperations() {
+        redisCircuitBreaker = new RedisCircuitBreaker();
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
-        MovieCacheService movieCacheService = new MovieCacheService(stringRedisTemplate, objectMapper);
+        MovieCacheService movieCacheService = new MovieCacheService(redisCircuitBreaker, stringRedisTemplate, objectMapper);
         movieService = new MovieService(java.time.Clock.system(me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE), movieRepository, movieMapper, movieCacheService);
     }
 
@@ -109,23 +110,15 @@ class MovieServiceCacheTest {
         DataAccessResourceFailureException redisFailure =
                 new DataAccessResourceFailureException("Redis is unavailable");
         when(valueOperations.get(CACHE_KEY)).thenThrow(redisFailure);
-        when(valueOperations.setIfAbsent(
-                eq("lock:movie:v1:detail:" + IMDB_ID),
-                any(),
-                any(Duration.class)
-        )).thenThrow(redisFailure);
         when(movieRepository.findMovieByImdbId(IMDB_ID)).thenReturn(Optional.of(movie));
         when(movieMapper.entityToDetailVO(movie)).thenReturn(databaseMovie);
-        when(objectMapper.writeValueAsString(databaseMovie)).thenReturn(CACHED_JSON);
-        doThrow(redisFailure)
-                .when(valueOperations)
-                .set(eq(CACHE_KEY), eq(CACHED_JSON), any(Duration.class));
 
         MovieDetailVO result = movieService.singleMovie(IMDB_ID);
 
-        assertEquals(databaseMovie, result);
+        assertSame(databaseMovie, result);
         verify(movieRepository).findMovieByImdbId(IMDB_ID);
-        verify(valueOperations).set(eq(CACHE_KEY), eq(CACHED_JSON), any(Duration.class));
+        verify(valueOperations, never()).setIfAbsent(any(), any(), any(Duration.class));
+        verify(valueOperations, never()).set(any(), any(), any(Duration.class));
     }
 
     private Movie movie() {

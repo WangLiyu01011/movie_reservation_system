@@ -2,6 +2,7 @@ package me.wly.movie_reservation.movie;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import me.wly.movie_reservation.common.redis.RedisCircuitBreaker;
 import me.wly.movie_reservation.movie.vo.MovieDetailVO;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -15,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
-import static me.wly.movie_reservation.common.util.RedisScriptLoader.script;
+import static me.wly.movie_reservation.common.redis.RedisScriptLoader.script;
 
 
 @Slf4j
@@ -27,7 +28,7 @@ public class MovieCacheService {
     private static final String NULL_VALUE = "__NULL__";
     private static final Duration REBUILD_LOCK_TTL = Duration.ofSeconds(10);
     private static final RedisScript<Long> RELEASE_LOCK_SCRIPT = script("redis/lock-release-request.lua", Long.class);
-
+    private final RedisCircuitBreaker redisCircuitBreaker;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -37,18 +38,22 @@ public class MovieCacheService {
         REDIS_UNAVAILABLE
     }
 
-    private record CacheLookup(boolean found, MovieDetailVO movie) {
+    private record CacheLookup(boolean redisAvailable, boolean found, MovieDetailVO movie) {
         private static CacheLookup hit(MovieDetailVO movie) {
-            return new CacheLookup(true, movie);
+            return new CacheLookup(true,true, movie);
         }
 
         // 空值键
         private static CacheLookup cachedNotFound() {
-            return new CacheLookup(true, null);
+            return new CacheLookup(true,true, null);
         }
 
         private static CacheLookup miss() {
-            return new CacheLookup(false, null);
+            return new CacheLookup(true,false, null);
+        }
+
+        private static CacheLookup redisUnavailable() {
+            return new CacheLookup(false, false, null);
         }
     }
 
@@ -59,10 +64,17 @@ public class MovieCacheService {
     ) {
         String cacheKey = detailKey(imdbId);
         CacheLookup lookup = readDetail(cacheKey);
+
+        if(!lookup.redisAvailable()) {
+            return databaseLoader.get();
+        }
+
         if (lookup.found()) {
             return lookup.movie();
         }
         return rebuildDetail(imdbId, cacheKey, databaseLoader);
+
+
     }
 
 
@@ -81,13 +93,14 @@ public class MovieCacheService {
         LockResult lockResult = tryAcquireLock(lockKey, lockToken);
 
         if (lockResult == LockResult.REDIS_UNAVAILABLE) {
-            return loadAndCache(cacheKey, databaseLoader);
+            return databaseLoader.get();
         }
 
         if (lockResult == LockResult.ACQUIRED) {
             try {
                 // 获取锁的过程中可能存在其他请求将缓存重建成功
                 CacheLookup secondLookup = readDetail(cacheKey);
+                if(!secondLookup.redisAvailable()) return databaseLoader.get();
                 if (secondLookup.found()) {
                     return secondLookup.movie();
                 }
@@ -103,6 +116,7 @@ public class MovieCacheService {
                 break;
             }
             CacheLookup retryLookup = readDetail(cacheKey);
+            if(!retryLookup.redisAvailable()) return databaseLoader.get();
             if (retryLookup.found()) {
                 return retryLookup.movie();
             }
@@ -111,7 +125,7 @@ public class MovieCacheService {
         return loadAndCache(cacheKey, databaseLoader);
     }
 
-    //
+
     private MovieDetailVO loadAndCache(
             String cacheKey,
             Supplier<MovieDetailVO> databaseLoader
@@ -127,47 +141,64 @@ public class MovieCacheService {
 
     // 尝试从缓存读取Movie Detail
     private CacheLookup readDetail(String key) {
-        String cachedJson = getCache(key);
-        if (cachedJson == null) {
-            return CacheLookup.miss();
-        }
-        if (NULL_VALUE.equals(cachedJson)) {
-            return CacheLookup.cachedNotFound();
-        }
+        RedisCircuitBreaker.Permit permit = redisCircuitBreaker.tryAcquire();
+        if(permit == null) return CacheLookup.redisUnavailable();
+        try {
+            String cachedJson = stringRedisTemplate.opsForValue().get(key);
+            redisCircuitBreaker.onSuccess(permit);
 
-        MovieDetailVO movie = deserializeMovie(key, cachedJson);
-        return movie == null ? CacheLookup.miss() : CacheLookup.hit(movie);
+            if (cachedJson == null) {
+                return CacheLookup.miss();
+            }
+            if (NULL_VALUE.equals(cachedJson)) {
+                return CacheLookup.cachedNotFound();
+            }
+            MovieDetailVO movie = deserializeMovie(key, cachedJson);
+            return movie == null ? CacheLookup.miss() : CacheLookup.hit(movie);
+        } catch (DataAccessException exception) {
+            log.warn("Redis read failed, key={}", key, exception);
+            redisCircuitBreaker.onFailure(permit);
+            return CacheLookup.redisUnavailable();
+        } finally {
+            redisCircuitBreaker.finish(permit);
+        }
     }
 
     private LockResult tryAcquireLock(String lockKey, String token) {
+        RedisCircuitBreaker.Permit permit = redisCircuitBreaker.tryAcquire();
+        if(permit == null) {
+            return LockResult.REDIS_UNAVAILABLE;
+        }
         try {
             Boolean acquired = stringRedisTemplate.opsForValue()
                     .setIfAbsent(lockKey, token, REBUILD_LOCK_TTL);
+            redisCircuitBreaker.onSuccess(permit);
             return Boolean.TRUE.equals(acquired)
                     ? LockResult.ACQUIRED
                     : LockResult.BUSY;
         } catch (DataAccessException exception) {
             log.warn("Redis cache rebuild lock failed, key={}", lockKey, exception);
+            redisCircuitBreaker.onFailure(permit);
             return LockResult.REDIS_UNAVAILABLE;
+        } finally {
+            redisCircuitBreaker.finish(permit);
         }
     }
 
     private void releaseLock(String lockKey, String token) {
+        RedisCircuitBreaker.Permit permit = redisCircuitBreaker.tryAcquire();
+        if(permit == null) return;
         try {
             stringRedisTemplate.execute(RELEASE_LOCK_SCRIPT, List.of(lockKey), token);
+            redisCircuitBreaker.onSuccess(permit);
         } catch (DataAccessException exception) {
+            redisCircuitBreaker.onFailure(permit);
             log.warn("Redis cache rebuild unlock failed, key={}", lockKey, exception);
+        } finally {
+            redisCircuitBreaker.finish(permit);
         }
     }
 
-    private String getCache(String key) {
-        try {
-            return stringRedisTemplate.opsForValue().get(key);
-        } catch (DataAccessException exception) {
-            log.warn("Redis read failed, key={}", key, exception);
-            return null;
-        }
-    }
 
     private MovieDetailVO deserializeMovie(String key, String json) {
         try {
@@ -181,32 +212,55 @@ public class MovieCacheService {
 
     // 设置电影缓存，加入了TTL随机偏移避免缓存雪崩
     private void setMovieCache(String key, MovieDetailVO movie) {
+        String json;
         try {
-            String json = objectMapper.writeValueAsString(movie);
+            json = objectMapper.writeValueAsString(movie);
+        } catch (JacksonException exception) {
+            log.warn("Movie serialization failed, key={}", key, exception);
+            return;
+        }
+
+        RedisCircuitBreaker.Permit permit = redisCircuitBreaker.tryAcquire();
+        if(permit == null) return;
+        try {
             long randomSeconds = ThreadLocalRandom.current().nextLong(0, 301);
             Duration ttl = Duration.ofMinutes(30).plusSeconds(randomSeconds);
             stringRedisTemplate.opsForValue().set(key, json, ttl);
-        } catch (JacksonException exception) {
-            log.warn("Movie serialization failed, key={}", key, exception);
+            redisCircuitBreaker.onSuccess(permit);
         } catch (DataAccessException exception) {
             log.warn("Redis write failed, key={}", key, exception);
+            redisCircuitBreaker.onFailure(permit);
+        } finally {
+            redisCircuitBreaker.finish(permit);
         }
     }
 
     // 为特定键设置空值缓存防止缓存穿透
     private void setNullCache(String key) {
+        RedisCircuitBreaker.Permit permit = redisCircuitBreaker.tryAcquire();
+        if(permit == null) return;
         try {
             stringRedisTemplate.opsForValue().set(key, NULL_VALUE, Duration.ofSeconds(60));
+            redisCircuitBreaker.onSuccess(permit);
         } catch (DataAccessException exception) {
             log.warn("Redis null cache write failed, key={}", key, exception);
+            redisCircuitBreaker.onFailure(permit);
+        } finally {
+            redisCircuitBreaker.finish(permit);
         }
     }
 
     private void deleteCache(String key) {
+        RedisCircuitBreaker.Permit permit = redisCircuitBreaker.tryAcquire();
+        if(permit == null) return;
         try {
             stringRedisTemplate.delete(key);
+            redisCircuitBreaker.onSuccess(permit);
         } catch (DataAccessException exception) {
             log.warn("Redis cache delete failed, key={}", key, exception);
+            redisCircuitBreaker.onFailure(permit);
+        } finally {
+            redisCircuitBreaker.finish(permit);
         }
     }
 

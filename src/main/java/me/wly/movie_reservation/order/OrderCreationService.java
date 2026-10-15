@@ -44,7 +44,7 @@ public class OrderCreationService {
     @Transactional
     public Order createOrder(OrderCreateDTO dto, User user) {
         Order existingOrder = orderRepository.findByUser_IdAndRequestId(user.getId(), dto.requestId())
-                .orElse(null);
+                .orElse(null); // 防止重复创建
 
         if (existingOrder != null) {
             validateExistingRequest(existingOrder, dto);
@@ -91,7 +91,7 @@ public class OrderCreationService {
         return savedOrder;
     }
 
-    // 判断是否存在requestId重复
+    // 判断是否存在requestId被不同订单创建请求重复使用
     private void validateExistingRequest(Order order, OrderCreateDTO dto) {
         boolean sameShowtime = order.getShowtime() != null
                 && Objects.equals(order.getShowtime().getId(), dto.showtimeId());

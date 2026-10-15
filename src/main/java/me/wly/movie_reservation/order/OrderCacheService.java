@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static me.wly.movie_reservation.common.util.RedisScriptLoader.script;
+import static me.wly.movie_reservation.common.redis.RedisScriptLoader.script;
 
 @Slf4j
 @Service

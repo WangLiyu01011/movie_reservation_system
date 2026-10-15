@@ -1,4 +1,4 @@
-package me.wly.movie_reservation.common.util;
+package me.wly.movie_reservation.common.redis;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
