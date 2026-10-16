@@ -2,6 +2,7 @@ package me.wly.movie_reservation.payment;
 
 import jakarta.persistence.EntityManager;
 import me.wly.movie_reservation.common.exception.BusinessException;
+import me.wly.movie_reservation.common.exception.ResultCode;
 import me.wly.movie_reservation.order.OrderExpirationService;
 import me.wly.movie_reservation.order.OrderRepository;
 import me.wly.movie_reservation.order.model.Order;
@@ -10,6 +11,7 @@ import me.wly.movie_reservation.payment.dto.PaymentRequestDTO;
 import me.wly.movie_reservation.payment.gateway.MockPaymentGateway;
 import me.wly.movie_reservation.payment.gateway.PaymentCreateCommand;
 import me.wly.movie_reservation.payment.gateway.PaymentCreateResult;
+import me.wly.movie_reservation.payment.gateway.PaymentGatewayRegistry;
 import me.wly.movie_reservation.payment.model.PaymentStatus;
 import me.wly.movie_reservation.payment.model.PaymentTransaction;
 import me.wly.movie_reservation.payment.vo.PaymentRequestVO;
@@ -17,8 +19,10 @@ import me.wly.movie_reservation.user.UserRepository;
 import me.wly.movie_reservation.user.model.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -34,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,15 +62,17 @@ class PaymentServiceTest {
     private PaymentService paymentService;
     @org.junit.jupiter.api.BeforeEach
     void setUpClock() {
+        when(mockPaymentGateway.channel()).thenReturn("MOCK");
         paymentService = new PaymentService(businessClock, paymentTransactionRepository, orderRepository,
-                userRepository, orderExpirationService, mockPaymentGateway, entityManager);
+                userRepository, orderExpirationService,
+                new PaymentGatewayRegistry(List.of(mockPaymentGateway)), entityManager);
     }
 
     @Test
     void createPayment_usesServerSideOrderAmount() {
         User user = user(10L, "customer");
         Order order = order(500L, "odr_test", user, LocalDateTime.now(businessClock).plusMinutes(5));
-        PaymentRequestDTO dto = new PaymentRequestDTO("odr_test", " alipay ", "payment-request-1");
+        PaymentRequestDTO dto = new PaymentRequestDTO("odr_test", " mock ", "payment-request-1");
         when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
         when(orderRepository.findByCodeAndUserIdForUpdate("odr_test", 10L)).thenReturn(Optional.of(order));
         when(paymentTransactionRepository.findByOrder_IdAndRequestId(500L, "payment-request-1"))
@@ -94,16 +101,22 @@ class PaymentServiceTest {
         PaymentTransaction payment = paymentCaptor.getValue();
         assertSame(order, payment.getOrder());
         assertEquals("payment-request-1", payment.getRequestId());
-        assertEquals("ALIPAY", payment.getChannel());
+        assertEquals("MOCK", payment.getChannel());
         assertEquals(new BigDecimal("100.00"), payment.getAmount());
         assertEquals(PaymentStatus.PAYING, payment.getStatus());
         assertEquals("mock_trade_test", payment.getProviderTradeNo());
         assertEquals("http://localhost:8080/api/v1/mock-payments/pay_test", payment.getPayUrl());
         assertEquals("pay_test", result.paymentNo());
+        assertEquals("MOCK", result.channel());
         assertEquals(new BigDecimal("100.00"), result.amount());
         assertEquals(PaymentStatus.PAYING, result.status());
         assertEquals(order.getExpiresAt(), result.expiresAt());
         assertEquals("http://localhost:8080/api/v1/mock-payments/pay_test", result.payUrl());
+        ArgumentCaptor<PaymentCreateCommand> commandCaptor = ArgumentCaptor.forClass(PaymentCreateCommand.class);
+        verify(mockPaymentGateway).createPayment(commandCaptor.capture());
+        assertEquals(order.getTotalPrice(), commandCaptor.getValue().amount());
+        assertEquals(order.getExpiresAt(), commandCaptor.getValue().expiresAt());
+        assertEquals("/api/v1/payment-callbacks/mock", commandCaptor.getValue().callbackUrl());
     }
 
     @Test
@@ -117,12 +130,13 @@ class PaymentServiceTest {
                 .thenReturn(Optional.of(existing));
 
         PaymentRequestVO result = paymentService.createPayment(
-                new PaymentRequestDTO("odr_test", "WECHAT", "payment-request-1"), "customer"
+                new PaymentRequestDTO("odr_test", " mock ", "payment-request-1"), "customer"
         );
 
         assertEquals("pay_existing", result.paymentNo());
-        assertEquals("ALIPAY", result.channel());
-        verify(paymentTransactionRepository, never()).save(any());
+        assertEquals("MOCK", result.channel());
+        verify(paymentTransactionRepository, never()).saveAndFlush(any());
+        verify(mockPaymentGateway, never()).createPayment(any());
     }
 
     @Test
@@ -139,12 +153,13 @@ class PaymentServiceTest {
                 .thenReturn(Optional.of(active));
 
         PaymentRequestVO result = paymentService.createPayment(
-                new PaymentRequestDTO("odr_test", "WECHAT", "new-request"), "customer"
+                new PaymentRequestDTO("odr_test", "MOCK", "new-request"), "customer"
         );
 
         assertEquals("pay_active", result.paymentNo());
         assertEquals(PaymentStatus.PAYING, result.status());
-        verify(paymentTransactionRepository, never()).save(any());
+        verify(paymentTransactionRepository, never()).saveAndFlush(any());
+        verify(mockPaymentGateway, never()).createPayment(any());
     }
 
     @Test
@@ -156,11 +171,77 @@ class PaymentServiceTest {
         when(orderExpirationService.expireLockedOrder(eq(order), any(LocalDateTime.class))).thenReturn(true);
 
         assertThrows(BusinessException.class, () -> paymentService.createPayment(
-                new PaymentRequestDTO("odr_expired", "ALIPAY", "new-request"), "customer"
+                new PaymentRequestDTO("odr_expired", "MOCK", "new-request"), "customer"
         ));
 
         verify(orderExpirationService).expireLockedOrder(eq(order), any(LocalDateTime.class));
-        verify(paymentTransactionRepository, never()).save(any());
+        verify(paymentTransactionRepository, never()).saveAndFlush(any());
+        verify(mockPaymentGateway, never()).createPayment(any());
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "ALIPAY", "WECHAT", "unknown"})
+    void createPayment_rejectsInvalidOrUnimplementedChannelsBeforeDatabaseAccess(String channel) {
+        BusinessException failure = assertThrows(BusinessException.class, () -> paymentService.createPayment(
+                new PaymentRequestDTO("odr_test", channel, "request-1"), "customer"));
+
+        assertEquals(ResultCode.BAD_REQUEST, failure.resultCode);
+        verifyNoInteractions(userRepository, orderRepository, paymentTransactionRepository, entityManager);
+        verify(mockPaymentGateway, never()).createPayment(any());
+    }
+
+    @Test
+    void createPayment_rejectsChannelWithoutRegisteredGatewayBeforeDatabaseAccess() {
+        var service = new PaymentService(businessClock, paymentTransactionRepository, orderRepository,
+                userRepository, orderExpirationService, new PaymentGatewayRegistry(List.of()), entityManager);
+
+        BusinessException failure = assertThrows(BusinessException.class, () -> service.createPayment(
+                new PaymentRequestDTO("odr_test", "MOCK", "request-1"), "customer"));
+
+        assertEquals(ResultCode.BAD_REQUEST, failure.resultCode);
+        verifyNoInteractions(userRepository, orderRepository, paymentTransactionRepository, entityManager);
+    }
+
+    @Test
+    void createPayment_rejectsDifferentChannelForSameRequestId() {
+        User user = user(10L, "customer");
+        Order order = order(500L, "odr_test", user, LocalDateTime.now(businessClock).plusMinutes(5));
+        PaymentTransaction existing = payment(700L, "pay_existing", order, "request-1", PaymentStatus.PAYING);
+        existing.setChannel("ALIPAY");
+        when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
+        when(orderRepository.findByCodeAndUserIdForUpdate("odr_test", 10L)).thenReturn(Optional.of(order));
+        when(paymentTransactionRepository.findByOrder_IdAndRequestId(500L, "request-1"))
+                .thenReturn(Optional.of(existing));
+
+        BusinessException failure = assertThrows(BusinessException.class, () -> paymentService.createPayment(
+                new PaymentRequestDTO("odr_test", "MOCK", "request-1"), "customer"));
+
+        assertEquals(ResultCode.BAD_REQUEST, failure.resultCode);
+        assertEquals("ALIPAY", existing.getChannel());
+        verify(paymentTransactionRepository, never()).saveAndFlush(any());
+        verify(mockPaymentGateway, never()).createPayment(any());
+    }
+
+    @Test
+    void createPayment_rejectsDifferentChannelForExistingActivePayment() {
+        User user = user(10L, "customer");
+        Order order = order(500L, "odr_test", user, LocalDateTime.now(businessClock).plusMinutes(5));
+        PaymentTransaction active = payment(701L, "pay_active", order, "old-request", PaymentStatus.PAYING);
+        active.setChannel("ALIPAY");
+        when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user));
+        when(orderRepository.findByCodeAndUserIdForUpdate("odr_test", 10L)).thenReturn(Optional.of(order));
+        when(paymentTransactionRepository.findFirstByOrder_IdAndStatusInOrderByIdDesc(
+                eq(500L), eq(List.of(PaymentStatus.CREATED, PaymentStatus.PAYING))))
+                .thenReturn(Optional.of(active));
+
+        BusinessException failure = assertThrows(BusinessException.class, () -> paymentService.createPayment(
+                new PaymentRequestDTO("odr_test", "MOCK", "new-request"), "customer"));
+
+        assertEquals(ResultCode.BAD_REQUEST, failure.resultCode);
+        assertEquals(PaymentStatus.PAYING, active.getStatus());
+        verify(paymentTransactionRepository, never()).saveAndFlush(any());
+        verify(mockPaymentGateway, never()).createPayment(any());
     }
 
     private User user(Long id, String username) {
@@ -193,7 +274,7 @@ class PaymentServiceTest {
         payment.setPaymentNo(paymentNo);
         payment.setOrder(order);
         payment.setRequestId(requestId);
-        payment.setChannel("ALIPAY");
+        payment.setChannel("MOCK");
         payment.setAmount(order.getTotalPrice());
         payment.setStatus(status);
         return payment;
