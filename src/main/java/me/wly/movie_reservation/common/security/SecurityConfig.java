@@ -32,6 +32,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/v1/payment-compensations/**").hasRole("SYSTEM_ADMIN")
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/movies/**",

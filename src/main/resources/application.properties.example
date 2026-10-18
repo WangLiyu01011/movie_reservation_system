@@ -16,6 +16,13 @@ order.expire-scan-delay-ms=60000
 order.expire-scan-initial-delay-ms=10000
 payment.mock.callback-secret=${PAYMENT_MOCK_CALLBACK_SECRET}
 payment.mock.checkout-base-url=${PAYMENT_MOCK_CHECKOUT_BASE_URL:http://localhost:8080/api/v1/mock-payments}
+payment.compensation.enabled=true
+payment.compensation.scan-delay=5s
+payment.compensation.initial-delay=10s
+payment.compensation.batch-size=20
+payment.compensation.max-attempts=8
+payment.compensation.lease=30s
+payment.compensation.poll-interval=5s
 
 order.redis.enabled=true
 order.redis.request-lock-ttl=60s
@@ -29,3 +36,12 @@ spring.data.redis.timeout=1s
 langchain4j.open-ai.chat-model.api-key=${OPENAI_API_KEY}
 langchain4j.open-ai.chat-model.base-url=${OPENAI_BASE_URL:https://api.openai.com/v1}
 langchain4j.open-ai.chat-model.model-name=${OPENAI_MODEL:gpt-4o-mini}
+
+# Temporary conversation history lives only in Redis; no database archival.
+ai.conversation.ttl=30m
+ai.conversation.lock-ttl=4m
+ai.conversation.max-messages=40
+ai.conversation.max-turns=50
+ai.conversation.max-session-bytes=524288
+ai.conversation.max-tool-round-trips=6
+ai.conversation.model-timeout=30s
