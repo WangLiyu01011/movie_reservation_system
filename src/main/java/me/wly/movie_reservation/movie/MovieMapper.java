@@ -3,6 +3,7 @@ package me.wly.movie_reservation.movie;
 import me.wly.movie_reservation.movie.model.Movie;
 import me.wly.movie_reservation.movie.vo.MovieDetailVO;
 import me.wly.movie_reservation.movie.vo.MovieVO;
+import me.wly.movie_reservation.movie.vo.MovieListItemVO;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -14,4 +15,5 @@ public interface MovieMapper {
     @Mapping(target = "posterImageURL")
     MovieVO entityToVO(Movie movie);
     MovieDetailVO entityToDetailVO(Movie movie);
+    MovieListItemVO entityToListItemVO(Movie movie);
 }

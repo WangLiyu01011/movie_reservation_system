@@ -1,9 +1,11 @@
 package me.wly.movie_reservation.movie;
 
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 import me.wly.movie_reservation.common.api.ApiResponse;
-import me.wly.movie_reservation.movie.model.Movie;
+import me.wly.movie_reservation.movie.dto.MovieSearchDTO;
 import me.wly.movie_reservation.movie.vo.MovieDetailVO;
+import me.wly.movie_reservation.movie.vo.MoviePageVO;
 import me.wly.movie_reservation.movie.vo.MovieVO;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +22,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MovieController {
     private final MovieService movieService;
+    private final MovieQueryService movieQueryService;
+
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<MoviePageVO>> searchMovies(@Valid @ModelAttribute MovieSearchDTO request) {
+        return ResponseEntity.ok(ApiResponse.success(movieQueryService.search(request)));
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<MovieVO>>> getMovies(@RequestParam(required = false) String genre){
