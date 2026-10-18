@@ -28,6 +28,7 @@ public class PaymentCallbackController {
             @RequestHeader("X-Mock-Signature") String signature
     ) {
         VerifiedPaymentCallback callback = mockPaymentGateway.verifyAndParseCallback(rawBody, signature);
+        mockPaymentGateway.recordProviderCallback(callback);
         paymentCallbackService.handleCallback(callback);
         return ResponseEntity.ok("success");
     }

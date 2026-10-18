@@ -4,7 +4,6 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.common.exception.ResultCode;
-import me.wly.movie_reservation.common.util.UuidCodeGenerator;
 import me.wly.movie_reservation.payment.dto.PaymentCallbackDTO;
 import me.wly.movie_reservation.payment.model.PaymentCallbackStatus;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,18 +29,21 @@ public class MockPaymentGateway extends PaymentGateway {
     private final String callbackSecret;
     private final ObjectMapper objectMapper;
     private final Validator validator;
+    private final MockProviderService provider;
 
     public MockPaymentGateway(
             @Value("${payment.mock.checkout-base-url:http://localhost:8080/api/v1/mock-payments}")
             String checkoutBaseUrl,
             @Value("${payment.mock.callback-secret}") String callbackSecret,
             ObjectMapper objectMapper,
-            Validator validator
+            Validator validator,
+            MockProviderService provider
     ) {
         this.checkoutBaseUrl = checkoutBaseUrl;
         this.callbackSecret = callbackSecret;
         this.objectMapper = objectMapper;
         this.validator = validator;
+        this.provider = provider;
     }
 
     @Override
@@ -51,18 +53,19 @@ public class MockPaymentGateway extends PaymentGateway {
 
     @Override
     public PaymentCreateResult createPayment(PaymentCreateCommand command) {
-        String providerTradeNo = UuidCodeGenerator.generateCode("mock_trade_");
         String payUrl = UriComponentsBuilder.fromUriString(checkoutBaseUrl)
                 .pathSegment(command.paymentNo())
                 .build()
                 .toUriString();
 
-        return new PaymentCreateResult(
-                providerTradeNo,
-                payUrl,
-                command.expiresAt()
-        );
+        return provider.create(command, payUrl);
     }
+
+    @Override public PaymentQueryResult queryPayment(String paymentNo) { return provider.query(paymentNo); }
+    @Override public PaymentQueryResult closePayment(String paymentNo) { return provider.close(paymentNo); }
+    @Override public RefundQueryResult refund(RefundCommand command) { return provider.refund(command); }
+    @Override public RefundQueryResult queryRefund(String refundNo) { return provider.queryRefund(refundNo); }
+    public void recordProviderCallback(VerifiedPaymentCallback callback) { provider.recordCallback(callback); }
 
     @Override
     public VerifiedPaymentCallback verifyAndParseCallback(String rawBody, String signature) {

@@ -30,10 +30,12 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             """)
     Optional<PaymentTransaction> findByPaymentNoForUpdate(@Param("paymentNo") String paymentNo);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<PaymentTransaction> findByOrder_IdAndRequestId(Long orderId, String requestId);
 
     Optional<PaymentTransaction> findByProviderTradeNo(String providerTradeNo);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<PaymentTransaction> findFirstByOrder_IdAndStatusInOrderByIdDesc(
             Long orderId,
             Collection<PaymentStatus> statuses

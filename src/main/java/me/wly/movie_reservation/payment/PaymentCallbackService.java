@@ -19,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.Clock;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +28,7 @@ public class PaymentCallbackService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final OrderRepository orderRepository;
     private final ShowtimeSeatService showtimeSeatService;
+    private final PaymentRefundService paymentRefundService;
 
     /**
      * The order row is always locked first. The timeout job follows the same rule,
@@ -107,6 +107,9 @@ public class PaymentCallbackService {
         }
         if (payment.getStatus() == PaymentStatus.REFUNDING
                 || payment.getStatus() == PaymentStatus.REFUNDED) {
+            if (payment.getStatus() == PaymentStatus.REFUNDING) {
+                paymentRefundService.requireAutomaticRefund(payment, "Unfulfillable payment");
+            }
             finishEvent(event, PaymentCallbackProcessStatus.REFUND_REQUIRED,
                     "Payment has already entered the refund flow");
             return;
@@ -166,6 +169,8 @@ public class PaymentCallbackService {
             showtimeSeatService.releaseLockedForOrder(order);
         }
 
+        paymentRefundService.requireAutomaticRefund(payment, reason);
+
         finishEvent(event, PaymentCallbackProcessStatus.REFUND_REQUIRED, reason);
     }
 
@@ -174,6 +179,9 @@ public class PaymentCallbackService {
             VerifiedPaymentCallback callback,
             PaymentCallbackEvent event
     ) {
+        if (!payment.getChannel().equals(callback.channel())) {
+            reject(event, "Payment channel mismatch");
+        }
         if (payment.getAmount().compareTo(callback.amount()) != 0) {
             reject(event, "Payment amount mismatch");
         }
