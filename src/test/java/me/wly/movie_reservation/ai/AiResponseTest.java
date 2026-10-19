@@ -17,6 +17,7 @@ import me.wly.movie_reservation.common.exception.GlobalExceptionHandler;
 import me.wly.movie_reservation.common.exception.ResultCode;
 import me.wly.movie_reservation.movie.MovieService;
 import me.wly.movie_reservation.movie.model.Movie;
+import me.wly.movie_reservation.movie.model.MovieGenre;
 import me.wly.movie_reservation.showtime.ShowtimeQueryService;
 import me.wly.movie_reservation.showtime.dto.ShowtimeCandidateDTO;
 import me.wly.movie_reservation.showtime.dto.ShowtimeSearchResultDTO;
@@ -30,6 +31,8 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.SliceImpl;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
@@ -164,8 +167,9 @@ class AiResponseTest {
     void sequentialLocationAndShowtimeLookupFitsTheExpandedToolBudget() {
         when(areas.search("汕头", 1, null)).thenReturn(resolvedCity());
         when(areas.search("龙湖", 2, 440500)).thenReturn(resolvedDistrict());
-        when(movies.getShowingMoviesOn(start)).thenReturn(List.of(new Movie(1, "tt1", start.minusDays(1), null,
-                "电影", "剧情简介", List.of("剧情"), "中文", "https://example.com/poster.jpg")));
+        when(movies.getShowingMoviesOn(start, null, null)).thenReturn(new SliceImpl<>(List.of(new Movie(
+                1, "tt1", start.minusDays(1), null, "电影", "剧情简介", List.of("剧情"), "中文",
+                "https://example.com/poster.jpg")), PageRequest.of(0, 5), false));
         var actual = new ShowtimeCandidateDTO(1001L, 1, "tt1", "电影", 2, "影院", "地址",
                 440500, "汕头市", 440507, "龙湖区", 3, "影厅", HallType.IMAX,
                 start, start.plusHours(2), new BigDecimal("45.50"), 7);
@@ -214,7 +218,8 @@ class AiResponseTest {
     void movieCardsUseActualToolObjects() {
         Movie movie = new Movie(1, "tt1", start.minusDays(1), null, "数据库电影",
                 "真实简介", List.of("剧情"), "中文", "https://example.com/poster.jpg");
-        when(movies.getShowingMoviesOn(start)).thenReturn(List.of(movie));
+        when(movies.getShowingMoviesOn(start, null, null))
+                .thenReturn(new SliceImpl<>(List.of(movie), PageRequest.of(0, 5), false));
         AiMessage call = AiMessage.from(ToolExecutionRequest.builder().id("movies-1")
                 .name("get_showing_movies").arguments("{\"time\":\"2030-01-01T12:00:00\"}").build());
         String reply = """
@@ -239,7 +244,10 @@ class AiResponseTest {
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
         mvc.perform(post("/api/v1/ai").principal(() -> "alice").contentType("application/json").content(body("查询")))
                 .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.message").value("AI response unavailable or invalid; please retry"));
+                .andExpect(jsonPath("$.message").value("AI response unavailable or invalid; please retry"))
+                .andExpect(jsonPath("$.traceId").isString())
+                .andExpect(jsonPath("$.stage").value("MODEL"))
+                .andExpect(jsonPath("$.errorCode").value("MODEL_FAILED"));
     }
 
     @ParameterizedTest
@@ -285,6 +293,92 @@ class AiResponseTest {
         assertThat(service(new ScriptedModel(toolCall(), AiMessage.from(reply)))
                 .chat("查询").blocks())
                 .filteredOn(block -> block instanceof AiBlock.ShowtimeCard).isEmpty();
+    }
+
+    @Test
+    void sequentialMoviePagesCanRecommendAnItemFromTheSecondBatch() {
+        var first = java.util.stream.IntStream.rangeClosed(1, 5).mapToObj(id -> movie(id, "剧情")).toList();
+        when(movies.getShowingMoviesOn(start, 0, null))
+                .thenReturn(new SliceImpl<>(first, PageRequest.of(0, 5), true));
+        when(movies.getShowingMoviesOn(start, 1, null))
+                .thenReturn(new SliceImpl<>(List.of(movie(6, "喜剧")), PageRequest.of(1, 5), false));
+        var model = new ScriptedModel(
+                movieCall("first", "get_showing_movies", 0, null),
+                movieCall("second", "get_showing_movies", 1, null),
+                AiMessage.from(movieAnswer(6)));
+
+        var response = service(model).chat("想看轻松搞笑的，如果前五部不合适就继续查");
+
+        assertThat(((AiBlock.MovieCard) response.blocks().get(1)).data().movie().movieId()).isEqualTo(6);
+        var order = inOrder(movies);
+        order.verify(movies).getShowingMoviesOn(start, 0, null);
+        order.verify(movies).getShowingMoviesOn(start, 1, null);
+        assertThat(model.requests.get(1).messages().toString()).contains("hasMore", "nextPage");
+        assertThat(model.requests.getFirst().messages().toString()).contains("每页固定5项", "按顺序再查5项");
+        assertThat(model.requests).hasSize(3);
+    }
+
+    @Test
+    void genreToolSelectionsUseCurrentPageEvidenceAndCanonicalGenre() {
+        when(movies.getShowingMoviesOn(start, 0, MovieGenre.COMEDY))
+                .thenReturn(new SliceImpl<>(List.of(movie(7, "喜剧")), PageRequest.of(0, 5), false));
+        var model = new ScriptedModel(movieCall("genre", "get_showing_movies_by_genre", 0, "搞笑"),
+                AiMessage.from(movieAnswer(7)));
+
+        var response = service(model).chat("想看一部搞笑的电影");
+
+        assertThat(((AiBlock.MovieCard) response.blocks().get(1)).data().movie().movieId()).isEqualTo(7);
+        verify(movies).getShowingMoviesOn(start, 0, MovieGenre.COMEDY);
+        verifyNoMoreInteractions(movies);
+        assertThat(model.requests.getFirst().messages().toString()).contains("提取合法类型", "注意否定偏好");
+    }
+
+    @Test
+    void invalidGenreIsRecoverableAndCannotBeUsedAsNoResultsEvidence() {
+        var model = new ScriptedModel(movieCall("genre", "get_showing_movies_by_genre", 0, "治愈"),
+                AiMessage.from(answer("GENERAL", "[]", "[]")));
+        assertThat(service(model).chat("有没有治愈的电影？").type())
+                .isEqualTo(me.wly.movie_reservation.ai.protocol.AiResponseType.GENERAL);
+        assertThat(model.requests.getLast().messages().toString()).contains("INVALID_GENRE", "supportedGenres");
+        assertInvalid(service(new ScriptedModel(movieCall("genre", "get_showing_movies_by_genre", 0, "治愈"),
+                AiMessage.from(answer("NO_RESULTS", "[]", "[]")))));
+        verifyNoInteractions(movies);
+    }
+
+    @Test
+    void emptyFirstMoviePageAllowsNoResultsButAnOutOfRangePageDoesNot() {
+        when(movies.getShowingMoviesOn(start, 0, null))
+                .thenReturn(new SliceImpl<>(List.of(), PageRequest.of(0, 5), false));
+        when(movies.getShowingMoviesOn(start, 20, null))
+                .thenReturn(new SliceImpl<>(List.of(), PageRequest.of(20, 5), false));
+        assertThat(service(new ScriptedModel(movieCall("first", "get_showing_movies", 0, null),
+                AiMessage.from(answer("NO_RESULTS", "[]", "[]")))).chat("推荐电影").type())
+                .isEqualTo(me.wly.movie_reservation.ai.protocol.AiResponseType.NO_RESULTS);
+        assertInvalid(service(new ScriptedModel(movieCall("beyond", "get_showing_movies", 20, null),
+                AiMessage.from(answer("NO_RESULTS", "[]", "[]")))));
+    }
+
+    @Test
+    void unselectedNonemptyPageWithMoreCandidatesIsNotAnEmptyCatalogue() {
+        when(movies.getShowingMoviesOn(start, 0, null))
+                .thenReturn(new SliceImpl<>(List.of(movie(1, "剧情")), PageRequest.of(0, 5), true));
+        assertInvalid(service(new ScriptedModel(movieCall("first", "get_showing_movies", 0, null),
+                AiMessage.from(answer("NO_RESULTS", "[]", "[]")))));
+    }
+
+    private Movie movie(int id, String genre) {
+        return new Movie(id, "tt" + id, start.minusDays(1), null, "电影" + id, "简介",
+                List.of(genre), "zh", "poster");
+    }
+
+    private AiMessage movieCall(String id, String tool, int page, String genre) {
+        return call(id, tool, "{\"time\":\"" + start + "\",\"page\":" + page
+                + (genre == null ? "" : ",\"genre\":\"" + genre + "\"") + "}");
+    }
+
+    private String movieAnswer(int id) {
+        return "{\"type\":\"MOVIE_RECOMMENDATION\",\"message\":\"推荐\",\"movies\":[{\"movieId\":"
+                + id + ",\"reason\":\"符合偏好\"}],\"showtimes\":[],\"missingFields\":[]}";
     }
 
     @ParameterizedTest

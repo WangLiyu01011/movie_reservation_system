@@ -70,6 +70,25 @@ class ShowtimeSeatServiceTest {
         verify(repository, times(2)).findLockedByOrderIdForUpdate(order.getId());
     }
 
+    @Test
+    void confirmedRefund_releasesOnlyOwnedSoldSeats() {
+        ShowtimeSeat seat = seat(1L, SeatStatus.SOLD);
+        Order order = order(seat); seat.setOrder(order);
+        when(repository.findSoldByOrderIdForUpdate(order.getId())).thenReturn(List.of(seat));
+        service().releaseSoldForOrder(order);
+        assertEquals(SeatStatus.AVAILABLE, seat.getStatus()); assertNull(seat.getOrder());
+    }
+
+    @Test
+    void confirmedRefund_rejectsOtherOwnersSeatWithoutChangingIt() {
+        ShowtimeSeat seat = seat(1L, SeatStatus.SOLD);
+        Order original = order(seat);
+        Order other = new Order(); other.setId(200L); seat.setOrder(other);
+        when(repository.findSoldByOrderIdForUpdate(original.getId())).thenReturn(List.of(seat));
+        assertThrows(IllegalStateException.class, () -> service().releaseSoldForOrder(original));
+        assertEquals(SeatStatus.SOLD, seat.getStatus()); assertSame(other, seat.getOrder());
+    }
+
     private ShowtimeSeatService service() {
         return new ShowtimeSeatService(repository);
     }

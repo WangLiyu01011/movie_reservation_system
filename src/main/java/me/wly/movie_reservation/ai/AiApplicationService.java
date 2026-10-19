@@ -23,7 +23,14 @@ public class AiApplicationService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Invalid AI session, request ID or message");
         }
         requireOwner(owner);
-        var lease = conversations.begin(request.sessionId(), owner);
+        try (var diagnostics = AiDiagnostics.open(request, properties)) {
+            try { return chatInSession(request, owner, diagnostics); }
+            catch (RuntimeException error) { diagnostics.requestFailed(error); throw error; }
+        }
+    }
+
+    private AiChatReplyVO chatInSession(AiRequestDTO request, String owner, AiDiagnostics diagnostics) {
+        var lease = diagnostics.measure(AiFailureCode.Stage.STORE, () -> conversations.begin(request.sessionId(), owner));
         try {
             for (AiTurnVO turn : lease.state().turns()) {
                 if (turn.requestId().equals(request.requestId())) {
@@ -34,18 +41,23 @@ public class AiApplicationService {
             if (lease.state().turns().size() >= properties.getMaxTurns()) throw new BusinessException(ResultCode.AI_SESSION_LIMIT);
             AiResponseVO response;
             String messagesJson;
+            diagnostics.beginGeneration();
             try {
-                var invocation = assistants.start(lease.state().messagesJson());
-                response = assembler.assemble(invocation.assistant().chat(request.userMessage()));
-                messagesJson = invocation.messagesJson();
+                var invocation = diagnostics.measure(AiFailureCode.Stage.SETUP,
+                        () -> assistants.start(lease.state().messagesJson()));
+                var answer = invocation.assistant().chat(request.userMessage());
+                diagnostics.parsingSucceeded();
+                diagnostics.checkBudget(false);
+                response = diagnostics.measure(AiFailureCode.Stage.VALIDATION, () -> assembler.assemble(answer));
+                messagesJson = diagnostics.measure(AiFailureCode.Stage.MEMORY, invocation::messagesJson);
+                diagnostics.checkBudget(false);
             } catch (RuntimeException exception) {
-                var failure = new BusinessException(ResultCode.INTERNAL_SERVER_ERROR, "AI response unavailable or invalid; please retry");
-                failure.initCause(exception);
-                throw failure;
+                throw diagnostics.generationFailed(exception);
             }
             var turns = new ArrayList<>(lease.state().turns());
             turns.add(new AiTurnVO(request.requestId(), request.userMessage(), response, businessClock.instant()));
-            var expiresAt = conversations.commit(lease, new AiConversationState(messagesJson, turns));
+            var expiresAt = diagnostics.measure(AiFailureCode.Stage.STORE,
+                    () -> conversations.commit(lease, new AiConversationState(messagesJson, turns)));
             return new AiChatReplyVO(lease.sessionId(), request.requestId(), expiresAt, response);
         } finally { conversations.release(lease); }
     }

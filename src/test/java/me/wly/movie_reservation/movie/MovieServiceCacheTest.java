@@ -45,11 +45,10 @@ class MovieServiceCacheTest {
     @Mock
     private ObjectMapper objectMapper;
     private MovieService movieService;
-    private RedisCircuitBreaker redisCircuitBreaker;
 
     @BeforeEach
     void setUpRedisOperations() {
-        redisCircuitBreaker = new RedisCircuitBreaker();
+        RedisCircuitBreaker redisCircuitBreaker = new RedisCircuitBreaker();
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
         MovieCacheService movieCacheService = new MovieCacheService(redisCircuitBreaker, stringRedisTemplate, objectMapper);
         movieService = new MovieService(java.time.Clock.system(me.wly.movie_reservation.common.time.BusinessTimeConfiguration.BUSINESS_ZONE), movieRepository, movieMapper, movieCacheService);

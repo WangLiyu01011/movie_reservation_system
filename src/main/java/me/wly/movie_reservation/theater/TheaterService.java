@@ -4,11 +4,13 @@ import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.common.exception.BusinessException;
 import me.wly.movie_reservation.common.exception.ResultCode;
 import me.wly.movie_reservation.theater.dto.TheaterCreateDTO;
+import me.wly.movie_reservation.theater.dto.TheaterSearchResultDTO;
 import me.wly.movie_reservation.theater.model.Area;
 import me.wly.movie_reservation.theater.model.Theater;
 import me.wly.movie_reservation.theater.vo.TheaterCreateVO;
 import me.wly.movie_reservation.theater.vo.TheaterVO;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -60,6 +62,27 @@ public class TheaterService {
         List<Theater> theaters = theaterRepository.findAll();
         return theaters.stream().map(entity->new TheaterVO(entity.getTheaterName(), entity.getLocation()))
                 .toList();
+    }
+
+    /** Bounded AI lookup; unlike the public list API, a resolved city is mandatory. */
+    @Transactional(readOnly = true)
+    public TheaterSearchResultDTO searchTheaters(Integer cityId, Integer districtId) {
+        if (cityId == null || cityId <= 0 || (districtId != null && districtId <= 0)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "A valid cityId and optional districtId are required");
+        }
+        Area city = areaRepository.findById(cityId)
+                .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "City not found"));
+        if (city.getLevel() != 1) throw new BusinessException(ResultCode.BAD_REQUEST, "cityId must refer to a city");
+        if (districtId != null) {
+            Area district = areaRepository.findById(districtId)
+                    .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "District not found"));
+            if (district.getLevel() != 2 || district.getParentId() != city.getId()) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "District must belong to the selected city");
+            }
+        }
+        var rows = theaterRepository.findCandidates(cityId, districtId, PageRequest.of(0, 21));
+        var items = rows.stream().limit(20).map(theater -> new TheaterVO(theater.getTheaterName(), theater.getLocation())).toList();
+        return new TheaterSearchResultDTO(cityId, districtId, items, rows.size() > 20);
     }
 
     private TheaterCreateVO toCreateVO(Theater theater) {

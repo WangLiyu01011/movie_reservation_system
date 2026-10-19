@@ -4,8 +4,9 @@ import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.P;
 import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.ai.vo.ShowingMovieVO;
+import me.wly.movie_reservation.ai.vo.ShowingMoviePageVO;
 import me.wly.movie_reservation.movie.MovieService;
-import me.wly.movie_reservation.movie.model.Movie;
+import me.wly.movie_reservation.movie.model.MovieGenre;
 import me.wly.movie_reservation.showtime.ShowtimeQueryService;
 import me.wly.movie_reservation.showtime.dto.ShowtimeSearchDTO;
 import me.wly.movie_reservation.showtime.dto.ShowtimeSearchResultDTO;
@@ -18,7 +19,6 @@ import org.springframework.stereotype.Component;
 import java.time.DayOfWeek;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -65,12 +65,40 @@ public class AiTools {
 
     @Tool(
             name = "get_showing_movies",
-            value = "获取指定时间正在上映的电影；查询某一时间放映电影时，先调用 get_current_time 或 get_day_of_week获得当日信息"
+            value = """
+                    分页获取指定时间正在上映的电影，每次固定最多5项，按上映时间及ID降序排列。
+                    先获取服务器时间，第一次page=0；本页没有符合用户偏好的电影且hasMore=true时，
+                    使用相同time和nextPage按顺序继续查询，禁止跳页或重复翻页；有合适结果即停止。
+                    hasMore=true不能声称已查完全部电影。用户明确指定合法类型时优先使用get_showing_movies_by_genre。
+                    """
     )
-    public List<ShowingMovieVO> getShowingMovies(
-            @P("ISO-8601 格式的日期时间，例如 2026-09-23T11:00:00") String time) {
-        List<Movie> movies = movieService.getShowingMoviesOn(LocalDateTime.parse(time));
-        return movies.stream()
+    public ShowingMoviePageVO getShowingMovies(
+            @P("ISO-8601日期时间；翻页时沿用首次查询的time") String time,
+            @P(value = "页码从0开始，默认0；后续使用上一页nextPage", required = false) Integer page) {
+        return moviePage(time, page, null);
+    }
+
+    @Tool(name = "get_showing_movies_by_genre", value = """
+            从用户自然语言中提取单个明确、肯定的电影类型关键词，再查询该类型正在上映的电影，每页固定5项。
+            合法类型：动作、冒险、动画、喜剧、犯罪、纪录、剧情、家庭、奇幻、历史、恐怖、音乐、悬疑、爱情、
+            科幻、电视电影、惊悚、战争、西部。支持对应英文名称和“科幻片”等后缀；搞笑映射喜剧、浪漫映射爱情。
+            例如“想看一部搞笑的电影”提取喜剧；“想看科幻片”提取科幻。只传关键词，不传原句。
+            不得把“不想看恐怖片”提取为想看恐怖；治愈、烧脑、适合约会不是合法类型，不得擅自等同某类型，
+            应询问具体类型或使用普通电影工具并依据简介筛选。多个类型不要拼接成一个关键词。
+            首次page=0；无合适候选且hasMore=true时，沿用相同time和genre、使用nextPage顺序翻页。
+            error不为空表示参数不合法，不是没有电影，应修正关键词或向用户确认。
+            """)
+    public ShowingMoviePageVO getShowingMoviesByGenre(
+            @P("ISO-8601日期时间；翻页时保持相同") String time,
+            @P("从用户需求提取的单个合法类型，如喜剧、科幻") String genre,
+            @P(value = "页码从0开始，默认0；后续使用上一页nextPage", required = false) Integer page) {
+        var resolved = MovieGenre.fromKeyword(genre);
+        return resolved.isEmpty() ? ShowingMoviePageVO.invalidGenre() : moviePage(time, page, resolved.get());
+    }
+
+    private ShowingMoviePageVO moviePage(String time, Integer page, MovieGenre genre) {
+        var result = movieService.getShowingMoviesOn(LocalDateTime.parse(time), page, genre);
+        var items = result.getContent().stream()
                 .map(movie -> new ShowingMovieVO(
                         movie.getId(),
                         movie.getImdbId(),
@@ -81,6 +109,9 @@ public class AiTools {
                         movie.getPosterImageURL()
                 ))
                 .toList();
+        return new ShowingMoviePageVO(items, result.getNumber(), 5, result.hasNext(),
+                result.hasNext() ? result.getNumber() + 1 : null, genre == null ? null : genre.label(), null,
+                java.util.List.of());
     }
 
     @Tool(name = "get_showtime_candidates", value = """

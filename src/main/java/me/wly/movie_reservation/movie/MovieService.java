@@ -2,9 +2,13 @@ package me.wly.movie_reservation.movie;
 
 import lombok.RequiredArgsConstructor;
 import me.wly.movie_reservation.movie.model.Movie;
+import me.wly.movie_reservation.movie.model.MovieGenre;
 import me.wly.movie_reservation.movie.vo.MovieDetailVO;
 import me.wly.movie_reservation.movie.vo.MovieVO;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.Clock;
@@ -63,8 +67,15 @@ public class MovieService {
                 .toList();
     }
 
-    public List<Movie> getShowingMoviesOn(LocalDateTime time) {
-        return movieRepository.findOnShowingMovies(time);
+    /** AI tools cannot increase the batch size; Slice avoids a catalogue-wide count query. */
+    @Transactional(readOnly = true)
+    public Slice<Movie> getShowingMoviesOn(LocalDateTime time, Integer page, MovieGenre genre) {
+        int pageNumber = page == null ? 0 : page;
+        if (time == null || pageNumber < 0 || (long) pageNumber * 5 > Integer.MAX_VALUE - 5) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Invalid movie query time or page");
+        }
+        return movieRepository.findShowingCandidates(time, genre == null ? null : genre.label(),
+                genre == null ? null : genre.englishLabel(), PageRequest.of(pageNumber, 5));
     }
 
     private BusinessException movieNotFound(String imdbId) {

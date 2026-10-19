@@ -44,4 +44,12 @@ public interface ShowtimeSeatRepository extends JpaRepository<ShowtimeSeat, Long
               and showtimeSeat.status = SeatStatus.LOCKED
             """)
     List<ShowtimeSeat> findLockedByOrderIdForUpdate(@Param("orderId") Long orderId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select seat from ShowtimeSeat seat
+            where seat.order.id = :orderId and seat.status = SeatStatus.SOLD
+            order by seat.id
+            """)
+    List<ShowtimeSeat> findSoldByOrderIdForUpdate(@Param("orderId") Long orderId);
 }

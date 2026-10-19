@@ -87,6 +87,23 @@ public class ShowtimeSeatService {
         return true;
     }
 
+    /** Only a confirmed full refund may release sold seats, while holding the order lock. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void releaseSoldForOrder(Order order) {
+        List<ShowtimeSeat> seats = showtimeSeatRepository.findSoldByOrderIdForUpdate(order.getId());
+        if (notMatchesOrderSeats(order, seats) || seats.stream().anyMatch(seat ->
+                seat.getStatus() != SeatStatus.SOLD || seat.getOrder() == null
+                        || !Objects.equals(seat.getOrder().getId(), order.getId()))) {
+            throw new IllegalStateException("Refunded order no longer owns all sold seats");
+        }
+        for (ShowtimeSeat seat : seats) {
+            seat.setStatus(SeatStatus.AVAILABLE);
+            seat.setOrder(null);
+            seat.setLockToken(null);
+            seat.setLockUntil(null);
+        }
+    }
+
     private boolean notMatchesOrderSeats(Order order, List<ShowtimeSeat> seats) {
         if (seats.isEmpty() || seats.size() != order.getOrderSeats().size()) {
             return true;

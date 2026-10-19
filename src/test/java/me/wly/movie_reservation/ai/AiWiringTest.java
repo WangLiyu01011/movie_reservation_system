@@ -21,6 +21,8 @@ import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.time.LocalDateTime;
@@ -83,11 +85,15 @@ class AiWiringTest {
                 "中文",
                 "https://example.com/poster.jpg"
         );
-        when(movieService.getShowingMoviesOn(now)).thenReturn(List.of(movie));
+        when(movieService.getShowingMoviesOn(now, null, null))
+                .thenReturn(new SliceImpl<>(List.of(movie), PageRequest.of(0, 5), false));
 
-        List<ShowingMovieVO> result = aiTools.getShowingMovies(now.toString());
+        var result = aiTools.getShowingMovies(now.toString(), null);
 
-        assertThat(result).containsExactly(new ShowingMovieVO(
+        assertThat(result.size()).isEqualTo(5);
+        assertThat(result.hasMore()).isFalse();
+        assertThat(result.nextPage()).isNull();
+        assertThat(result.items()).containsExactly(new ShowingMovieVO(
                 1,
                 "tt-test",
                 "测试电影",

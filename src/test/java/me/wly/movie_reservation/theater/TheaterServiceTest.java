@@ -13,6 +13,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.List;
+import java.util.stream.IntStream;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -84,6 +87,47 @@ class TheaterServiceTest {
 
     private TheaterCreateDTO validDto() {
         return new TheaterCreateDTO(100, 101, "西湖影城", "文三路 100 号");
+    }
+
+    @Test
+    void aiSearchRequiresARealCity() {
+        assertThrows(BusinessException.class, () -> theaterService.searchTheaters(null, null));
+        when(areaRepository.findById(440000)).thenReturn(Optional.of(area(440000, "广东省", 0, (short) 0)));
+        assertThrows(BusinessException.class, () -> theaterService.searchTheaters(440000, null));
+        verify(theaterRepository, never()).findCandidates(any(), any(), any());
+    }
+
+    @Test
+    void aiSearchRejectsDistrictFromAnotherCity() {
+        when(areaRepository.findById(440500)).thenReturn(Optional.of(area(440500, "汕头市", 440000, (short) 1)));
+        when(areaRepository.findById(330106)).thenReturn(Optional.of(area(330106, "西湖区", 330100, (short) 2)));
+        assertThrows(BusinessException.class, () -> theaterService.searchTheaters(440500, 330106));
+        verify(theaterRepository, never()).findCandidates(any(), any(), any());
+    }
+
+    @Test
+    void aiSearchReturnsBoundedResultsAndSignalsMore() {
+        when(areaRepository.findById(440500)).thenReturn(Optional.of(area(440500, "汕头市", 440000, (short) 1)));
+        when(theaterRepository.findCandidates(eq(440500), eq(null), any())).thenReturn(
+                IntStream.range(0, 21).mapToObj(i -> {
+                    var theater = new Theater();
+                    theater.setTheaterName("影院" + i);
+                    theater.setLocation("地址" + i);
+                    return theater;
+                }).toList());
+        var result = theaterService.searchTheaters(440500, null);
+        assertThat(result.items()).hasSize(20);
+        assertThat(result.hasMore()).isTrue();
+    }
+
+    @Test
+    void aiSearchSupportsDistrictAndEmptyResults() {
+        when(areaRepository.findById(440500)).thenReturn(Optional.of(area(440500, "汕头市", 440000, (short) 1)));
+        when(areaRepository.findById(440507)).thenReturn(Optional.of(area(440507, "龙湖区", 440500, (short) 2)));
+        when(theaterRepository.findCandidates(eq(440500), eq(440507), any())).thenReturn(List.of());
+        var result = theaterService.searchTheaters(440500, 440507);
+        assertThat(result.items()).isEmpty();
+        assertThat(result.hasMore()).isFalse();
     }
 
     private Area area(int id, String name, int parentId, short level) {

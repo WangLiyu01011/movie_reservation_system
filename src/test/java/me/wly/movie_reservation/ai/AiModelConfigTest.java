@@ -31,6 +31,7 @@ class AiModelConfigTest {
     private final Queue<Map<String, Object>> replies = new ConcurrentLinkedQueue<>();
     private final AiConversationProperties properties = new AiConversationProperties();
     private HttpServer server;
+    private volatile long replyDelayMillis;
 
     @BeforeEach
     void startLocalProvider() throws Exception {
@@ -39,6 +40,10 @@ class AiModelConfigTest {
         server.createContext("/v1/chat/completions", exchange -> {
             try {
                 requests.add(json.readTree(exchange.getRequestBody().readAllBytes()));
+                if (replyDelayMillis > 0) {
+                    try { Thread.sleep(replyDelayMillis); }
+                    catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); return; }
+                }
                 var reply = replies.remove();
                 byte[] body = json.writeValueAsString(Map.of(
                         "id", "chatcmpl-test", "object", "chat.completion", "created", 0,
@@ -106,9 +111,49 @@ class AiModelConfigTest {
         assertJsonMode(requests.element());
     }
 
+    @Test
+    void disabledKimiThinkingOmitsFixedTemperatureAndHonorsOutputBudget() {
+        properties.setThinkingMode(AiConversationProperties.ThinkingMode.DISABLED);
+        properties.setMaxOutputTokens(2048);
+        enqueueAnswer(generalAnswer());
+        assistant(model("kimi-k2.6")).start("[]").assistant().chat("你好");
+        var request = requests.element();
+        assertThat(request.path("thinking").path("type").asString()).isEqualTo("disabled");
+        assertThat(request.has("temperature")).isFalse();
+        assertThat(request.path("max_tokens").asInt()).isEqualTo(2048);
+        assertThat(request.path("response_format").path("type").asString()).isEqualTo("json_object");
+    }
+
+    @Test
+    void defaultKimiModePreservesReasoningDuringTheToolLoopWithoutLoggingIt() {
+        replies.add(Map.of("index", 0, "finish_reason", "tool_calls", "message", Map.of(
+                "role", "assistant", "reasoning_content", "private-reasoning-marker", "tool_calls", List.of(Map.of(
+                        "id", "time-1", "type", "function", "function", Map.of("name", "get_current_time", "arguments", "{}"))))));
+        enqueueAnswer(generalAnswer());
+        assistant(model("kimi-k2.6")).start("[]").assistant().chat("几点？");
+        assertThat(requests).hasSize(2);
+        assertThat(requests.stream().toList().getLast().path("messages").toString()).contains("private-reasoning-marker", "reasoning_content");
+        assertThat(requests.element().has("thinking")).isFalse();
+    }
+
+    @Test
+    void realHttpReadTimeoutIsClassifiedWithoutAutomaticRetries() {
+        properties.setModelTimeout(Duration.ofMillis(80));
+        replyDelayMillis = 400;
+        enqueueAnswer(generalAnswer());
+        assertThatThrownBy(() -> assistant(model()).start("[]").assistant().chat("你好"))
+                .isInstanceOfSatisfying(AiDiagnosticException.class,
+                        error -> assertThat(error.code()).isEqualTo(AiFailureCode.MODEL_TIMEOUT));
+        assertThat(requests).hasSize(1);
+    }
+
     private dev.langchain4j.model.chat.ChatModel model() {
+        return model("test-model");
+    }
+
+    private dev.langchain4j.model.chat.ChatModel model(String name) {
         return new AiModelConfig().movieChatModel("test-key",
-                "http://127.0.0.1:" + server.getAddress().getPort() + "/v1", "test-model", properties);
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/v1", name, properties);
     }
 
     private AiAssistantFactory assistant(dev.langchain4j.model.chat.ChatModel model) {

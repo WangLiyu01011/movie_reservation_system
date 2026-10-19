@@ -1,6 +1,7 @@
 package me.wly.movie_reservation.common.exception;
 
 import org.springframework.http.HttpStatus;
+import me.wly.movie_reservation.ai.AiFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -29,6 +30,11 @@ public class GlobalExceptionHandler {
         response.put("code", e.resultCode.getCode());
         response.put("message", e.getMessage());
         response.put("data", null);
+        if (e instanceof AiFailureException aiFailure) {
+            response.put("traceId", aiFailure.traceId());
+            response.put("errorCode", aiFailure.errorCode().name());
+            response.put("stage", aiFailure.errorCode().stage().name());
+        }
         ResponseEntity.BodyBuilder builder = ResponseEntity.status(toHttpStatus(e.resultCode));
         if (e instanceof RateLimitException rateLimitException) {
             builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(rateLimitException.getRetryAfterSeconds()));

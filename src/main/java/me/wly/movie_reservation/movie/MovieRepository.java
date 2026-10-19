@@ -3,6 +3,7 @@ package me.wly.movie_reservation.movie;
 import me.wly.movie_reservation.movie.model.Movie;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -31,6 +32,15 @@ public interface MovieRepository extends JpaRepository<Movie, Integer> {
             """;
     String SHOWING_WINDOW = " WHERE m.release_date <= :now AND (m.off_date IS NULL OR m.off_date > :now) ";
     String UPCOMING_WINDOW = " WHERE m.release_date > :now ";
+
+    @Query(value = "SELECT m.* FROM movie m" + SHOWING_WINDOW + """
+             AND (:genre IS NULL
+                  OR JSON_CONTAINS(LOWER(m.genres), JSON_QUOTE(LOWER(:genre))) = 1
+                  OR JSON_CONTAINS(LOWER(m.genres), JSON_QUOTE(LOWER(:englishGenre))) = 1)
+             ORDER BY m.release_date DESC, m.id DESC
+            """, nativeQuery = true)
+    Slice<Movie> findShowingCandidates(@Param("now") LocalDateTime now, @Param("genre") String genre,
+                                       @Param("englishGenre") String englishGenre, Pageable pageable);
 
     @Query(value = "SELECT m.* FROM movie m" + SHOWING_WINDOW + SEARCH_FILTERS
             + " ORDER BY m.release_date DESC, m.id DESC",
