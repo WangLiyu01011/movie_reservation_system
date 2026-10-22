@@ -31,6 +31,7 @@ public class MovieCacheService {
     private final RedisCircuitBreaker redisCircuitBreaker;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
+    private final MovieLoadProtection protection;
 
     private enum LockResult {
         ACQUIRED,
@@ -64,15 +65,17 @@ public class MovieCacheService {
     ) {
         String cacheKey = detailKey(imdbId);
         CacheLookup lookup = readDetail(cacheKey);
+        protection.count("movie.cache.lookup", !lookup.redisAvailable() ? "redis_unavailable"
+                : !lookup.found() ? "miss" : lookup.movie() == null ? "negative_hit" : "hit");
 
         if(!lookup.redisAvailable()) {
-            return databaseLoader.get();
+            return protection.singleFlight(cacheKey, () -> protection.fallback(cacheKey, databaseLoader));
         }
 
         if (lookup.found()) {
             return lookup.movie();
         }
-        return rebuildDetail(imdbId, cacheKey, databaseLoader);
+        return protection.singleFlight(cacheKey, () -> rebuildDetail(imdbId, cacheKey, databaseLoader));
 
 
     }
@@ -81,7 +84,7 @@ public class MovieCacheService {
     /** 重建缓存：
      *  1. 尝试通过redis互斥锁限制并发的数据库请求（缓存击穿）
      *  2. 获取锁之后进行二次look up，若未重建成功则进行缓存重建并返回查询结果
-     *  3. 未获取锁，等待并尝试再次读取缓存。若超过等待上限查询数据库（此时可能有击穿风险）
+     *  3. 未获取锁，有限等待缓存；超时拒绝请求，不绕过分布式锁回源。
      */
     private MovieDetailVO rebuildDetail(
             String imdbId,
@@ -93,14 +96,14 @@ public class MovieCacheService {
         LockResult lockResult = tryAcquireLock(lockKey, lockToken);
 
         if (lockResult == LockResult.REDIS_UNAVAILABLE) {
-            return databaseLoader.get();
+            return protection.fallback(cacheKey, databaseLoader);
         }
 
         if (lockResult == LockResult.ACQUIRED) {
             try {
                 // 获取锁的过程中可能存在其他请求将缓存重建成功
                 CacheLookup secondLookup = readDetail(cacheKey);
-                if(!secondLookup.redisAvailable()) return databaseLoader.get();
+                if(!secondLookup.redisAvailable()) return protection.fallback(cacheKey, databaseLoader);
                 if (secondLookup.found()) {
                     return secondLookup.movie();
                 }
@@ -113,16 +116,16 @@ public class MovieCacheService {
         // 已经有重建中的请求，进行缓存读取重试
         for (int retry = 0; retry < 5; retry++) {
             if (!sleepBriefly()) {
-                break;
+                throw protection.rejected("interrupted");
             }
             CacheLookup retryLookup = readDetail(cacheKey);
-            if(!retryLookup.redisAvailable()) return databaseLoader.get();
+            if(!retryLookup.redisAvailable()) return protection.fallback(cacheKey, databaseLoader);
             if (retryLookup.found()) {
                 return retryLookup.movie();
             }
         }
 
-        return loadAndCache(cacheKey, databaseLoader);
+        throw protection.rejected("distributed_lock_timeout");
     }
 
 
@@ -130,7 +133,7 @@ public class MovieCacheService {
             String cacheKey,
             Supplier<MovieDetailVO> databaseLoader
     ) {
-        MovieDetailVO movie = databaseLoader.get();
+        MovieDetailVO movie = protection.database("rebuild", databaseLoader);
         if (movie == null) {
             setNullCache(cacheKey);
         } else {
@@ -156,7 +159,8 @@ public class MovieCacheService {
             MovieDetailVO movie = deserializeMovie(key, cachedJson);
             return movie == null ? CacheLookup.miss() : CacheLookup.hit(movie);
         } catch (DataAccessException exception) {
-            log.warn("Redis read failed, key={}", key, exception);
+            protection.count("movie.redis.failure", "read");
+            log.warn("Movie Redis read failed: {}", exception.getClass().getSimpleName());
             redisCircuitBreaker.onFailure(permit);
             return CacheLookup.redisUnavailable();
         } finally {
@@ -177,7 +181,8 @@ public class MovieCacheService {
                     ? LockResult.ACQUIRED
                     : LockResult.BUSY;
         } catch (DataAccessException exception) {
-            log.warn("Redis cache rebuild lock failed, key={}", lockKey, exception);
+            protection.count("movie.redis.failure", "lock");
+            log.warn("Movie Redis lock failed: {}", exception.getClass().getSimpleName());
             redisCircuitBreaker.onFailure(permit);
             return LockResult.REDIS_UNAVAILABLE;
         } finally {
@@ -193,7 +198,8 @@ public class MovieCacheService {
             redisCircuitBreaker.onSuccess(permit);
         } catch (DataAccessException exception) {
             redisCircuitBreaker.onFailure(permit);
-            log.warn("Redis cache rebuild unlock failed, key={}", lockKey, exception);
+            protection.count("movie.redis.failure", "unlock");
+            log.warn("Movie Redis unlock failed: {}", exception.getClass().getSimpleName());
         } finally {
             redisCircuitBreaker.finish(permit);
         }
@@ -228,7 +234,8 @@ public class MovieCacheService {
             stringRedisTemplate.opsForValue().set(key, json, ttl);
             redisCircuitBreaker.onSuccess(permit);
         } catch (DataAccessException exception) {
-            log.warn("Redis write failed, key={}", key, exception);
+            protection.count("movie.redis.failure", "write");
+            log.warn("Movie Redis write failed: {}", exception.getClass().getSimpleName());
             redisCircuitBreaker.onFailure(permit);
         } finally {
             redisCircuitBreaker.finish(permit);
@@ -243,7 +250,8 @@ public class MovieCacheService {
             stringRedisTemplate.opsForValue().set(key, NULL_VALUE, Duration.ofSeconds(60));
             redisCircuitBreaker.onSuccess(permit);
         } catch (DataAccessException exception) {
-            log.warn("Redis null cache write failed, key={}", key, exception);
+            protection.count("movie.redis.failure", "negative_write");
+            log.warn("Movie Redis negative write failed: {}", exception.getClass().getSimpleName());
             redisCircuitBreaker.onFailure(permit);
         } finally {
             redisCircuitBreaker.finish(permit);
@@ -257,7 +265,8 @@ public class MovieCacheService {
             stringRedisTemplate.delete(key);
             redisCircuitBreaker.onSuccess(permit);
         } catch (DataAccessException exception) {
-            log.warn("Redis cache delete failed, key={}", key, exception);
+            protection.count("movie.redis.failure", "delete");
+            log.warn("Movie Redis delete failed: {}", exception.getClass().getSimpleName());
             redisCircuitBreaker.onFailure(permit);
         } finally {
             redisCircuitBreaker.finish(permit);

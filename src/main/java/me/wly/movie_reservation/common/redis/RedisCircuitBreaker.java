@@ -24,6 +24,9 @@ public final class RedisCircuitBreaker {
     private final AtomicReference<Snapshot> state =
             new AtomicReference<>(new Snapshot(Mode.CLOSED, 0));
 
+    /** Observability only: CLOSED=0, OPEN=1, HALF_OPEN=2. */
+    public int modeValue() { return state.get().mode().ordinal(); }
+
     // 返回null表示当前请求应跳过Redis
     public Permit tryAcquire() {
         while (true) {
